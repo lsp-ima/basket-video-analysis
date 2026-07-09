@@ -342,8 +342,8 @@ input.pname:focus{outline:none;border-color:var(--accent-line);box-shadow:0 0 0 
     <p class="sub">選手を自動で検出・追跡します。解析中はこのタブを開いたままにしてください。</p>
     <div class="optrow" style="margin-bottom:10px">
       <label><input type="checkbox" id="targUse"> 🎯 ターゲット追跡</label>
-      <input type="color" id="targCol" value="#1976d2" style="width:44px;height:32px;border:1px solid var(--line);border-radius:8px;background:var(--field);padding:2px">
-      <span class="hint" id="targHint">チェックを入れて、下の映像の中の「追いたいチームのユニフォーム」を直接タップ</span>
+      <input type="color" id="targCol" value="#1976d2" tabindex="-1" style="width:44px;height:32px;border:1px solid var(--line);border-radius:8px;background:var(--field);padding:2px;pointer-events:none">
+      <span class="hint" id="targHint">チェックを入れて、<b>下の映像の中の「追いたい選手のユニフォーム」を直接タップ</b>(左の四角に色が入ります)</span>
     </div>
     <div class="optrow">
       <label>解析の細かさ:</label>
