@@ -1095,6 +1095,21 @@ function buildTagUI(){
     };
     tm.nums.forEach(n => mk('#'+n, n));
     mk('チーム全体', null, 'teamall');
+    // 記録の途中でも選手(背番号)を追加できる
+    const add = document.createElement('button');
+    add.className = 'pchip teamall'; add.textContent = '＋追加';
+    add.onclick = () => {
+      const v = prompt(`${tm.name}に追加する背番号を入力(複数はスペース区切り)`, '');
+      if (!v) return;
+      const nums = parseNums(v).filter(n => !tm.nums.includes(n));
+      if (!nums.length){ toast('追加できる番号がありません'); return; }
+      tm.nums.push(...nums);
+      try { localStorage.setItem('va-teams', JSON.stringify(tagTeams)); } catch(e){}
+      selected = null;
+      buildTagUI(); renderTagStats();
+      toast(`${tm.name}に ${nums.map(n=>'#'+n).join(' ')} を追加しました`);
+    };
+    row.appendChild(add);
     box.appendChild(hd); box.appendChild(row);
   });
   const er = $('evtRow'); er.innerHTML = '';
