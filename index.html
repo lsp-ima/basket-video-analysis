@@ -9,6 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{
   --bg:#f7f5f0;--bg2:#fdfcf9;
@@ -183,6 +184,24 @@ input.pname:focus{outline:none;border-color:var(--accent-line);box-shadow:0 0 0 
 .hist-meta{font-size:11.5px;color:var(--muted)}
 .hist-body{margin-top:10px;overflow-x:auto}
 .hist-empty{color:var(--muted);font-size:13px;padding:8px 2px}
+
+/* 合言葉ゲート */
+#gate{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;
+  padding:20px;background:
+    radial-gradient(1100px 520px at 20% -8%,var(--bgfx1),transparent 60%),
+    radial-gradient(900px 480px at 90% 0%,var(--bgfx2),transparent 55%),
+    linear-gradient(180deg,var(--bg2) 0%,var(--bg) 42%)}
+.gate-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  box-shadow:var(--shadow);padding:30px 26px;width:100%;max-width:400px;text-align:center}
+.gate-card .glogo{width:56px;height:56px;border-radius:16px;display:flex;align-items:center;justify-content:center;
+  font-size:28px;background:var(--grad-accent);box-shadow:0 8px 20px var(--glow);margin:0 auto 14px}
+.gate-card h1{margin:0 0 4px;font-size:18px;font-weight:900}
+.gate-card .gsub{font-size:12px;color:var(--muted);margin-bottom:20px}
+.gate-card input{width:100%;border:1px solid var(--line);background:var(--field);color:var(--text);
+  border-radius:12px;padding:13px 14px;font-size:16px;font-family:inherit;text-align:center;font-weight:700}
+.gate-card input:focus{outline:none;border-color:var(--accent-line);box-shadow:0 0 0 3px var(--focus-ring)}
+.gate-card .gerr{min-height:20px;font-size:12.5px;color:var(--danger-fg);margin:8px 0 4px;font-weight:700}
+.gate-card .btn{width:100%;margin-top:2px}
 #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);
   background:var(--toast-bg);color:#fff;font-size:13px;padding:11px 18px;border-radius:12px;
   opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:50;max-width:86vw;text-align:center}
@@ -384,6 +403,18 @@ input.pname:focus{outline:none;border-color:var(--accent-line);box-shadow:0 0 0 
 
 <div id="toast"></div>
 
+<!-- 合言葉ゲート(照合が済むまでアプリは使えない) -->
+<div id="gate">
+  <div class="gate-card">
+    <div class="glogo">🎥</div>
+    <h1>動画分析</h1>
+    <div class="gsub">TEAM BOARD ｜ AI試合分析(β)</div>
+    <input type="text" id="gateInput" placeholder="チームの合言葉" autocomplete="off" enterkeyhint="go">
+    <div class="gerr" id="gateErr"></div>
+    <button class="btn" id="gateBtn">はじめる</button>
+  </div>
+</div>
+
 <script>
 'use strict';
 /* ============================================================
@@ -406,6 +437,45 @@ const COURT_W = 28, COURT_H = 15;  // 中学生は一般コート(FIBA)と同寸
 
 const $ = id => document.getElementById(id);
 const video = $('video');
+
+/* ---------- 合言葉ゲート(va_teamsテーブル・作戦盤とは別台帳) ---------- */
+const SUPABASE_URL = "https://zkskoyqitkoqkalmvuhd.supabase.co";
+const SUPABASE_KEY = "sb_publishable_75v_m73Et2R4wVWGS68iNg_R_PZnMaH";
+let sb = null;
+try { sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY); } catch(e){}
+
+async function vaTeamCheck(id){
+  const { data, error } = await sb.rpc('va_team_check', { p_team_id: id });
+  if (error) throw error;
+  return data === true;
+}
+async function gateSubmit(){
+  const id = $('gateInput').value.trim();
+  if (!id){ $('gateErr').textContent = '合言葉を入力してください'; return; }
+  $('gateBtn').disabled = true; $('gateErr').textContent = '';
+  try {
+    if (await vaTeamCheck(id)){
+      try { localStorage.setItem('va-team', id); } catch(e){}
+      $('gate').classList.add('hidden');
+    } else {
+      $('gateErr').textContent = 'この合言葉は使えません(未登録または停止中)';
+    }
+  } catch(e){
+    $('gateErr').textContent = '通信エラーです。電波の良い場所でもう一度お試しください';
+  }
+  $('gateBtn').disabled = false;
+}
+$('gateBtn') && ($('gateBtn').onclick = gateSubmit);
+$('gateInput') && ($('gateInput').onkeydown = e => { if (e.key === 'Enter') gateSubmit(); });
+/* 起動時: 保存済みの合言葉も毎回照合し直す(停止・期限切れを反映するため) */
+(async () => {
+  const saved = (()=>{ try { return localStorage.getItem('va-team'); } catch(e){ return null; } })();
+  if (!saved) return;
+  try {
+    if (await vaTeamCheck(saved)) $('gate').classList.add('hidden');
+    else { try { localStorage.removeItem('va-team'); } catch(e){} }
+  } catch(e){ /* 通信不可の間はゲートのまま */ }
+})();
 let session = null, inputName = '', outputName = '';
 let corners = [];            // コート四隅 [x,y] (動画ピクセル座標)
 let H = null;                // ホモグラフィ行列(3x3) 画素→コートm座標
