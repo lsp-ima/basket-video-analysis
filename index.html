@@ -342,8 +342,8 @@ input.pname:focus{outline:none;border-color:var(--accent-line);box-shadow:0 0 0 
     <p class="sub">選手を自動で検出・追跡します。解析中はこのタブを開いたままにしてください。</p>
     <div class="optrow" style="margin-bottom:10px">
       <label><input type="checkbox" id="targUse"> 🎯 ターゲット追跡</label>
-      <label>ユニフォーム色</label><input type="color" id="targCol" value="#1976d2" style="width:44px;height:32px;border:1px solid var(--line);border-radius:8px;background:var(--field);padding:2px">
-      <span class="hint">指定した色の選手を優先表示し、結果画面で背番号を付けて名寄せできます</span>
+      <input type="color" id="targCol" value="#1976d2" style="width:44px;height:32px;border:1px solid var(--line);border-radius:8px;background:var(--field);padding:2px">
+      <span class="hint" id="targHint">チェックを入れて、下の映像の中の「追いたいチームのユニフォーム」を直接タップ</span>
     </div>
     <div class="optrow">
       <label>解析の細かさ:</label>
@@ -663,6 +663,22 @@ function enterStep3(){
   showScreen('step3');
   loadModel();
 }
+/* 映像をタップしてユニフォーム色を直接拾う(カラーピッカー不要) */
+live.addEventListener('pointerdown', e => {
+  if (running) return;
+  const r = live.getBoundingClientRect();
+  const x = Math.round((e.clientX - r.left) * live.width / r.width);
+  const y = Math.round((e.clientY - r.top) * live.height / r.height);
+  const S = 4; // タップ点の周辺 9x9px を平均
+  const d = lctx.getImageData(Math.max(0,x-S), Math.max(0,y-S), S*2+1, S*2+1).data;
+  let cr=0,cg=0,cb=0,n=d.length/4;
+  for (let i=0;i<d.length;i+=4){ cr+=d[i]; cg+=d[i+1]; cb+=d[i+2]; }
+  const hex = '#' + [cr/n, cg/n, cb/n].map(v=>Math.round(v).toString(16).padStart(2,'0')).join('');
+  $('targCol').value = hex;
+  $('targUse').checked = true;
+  $('targHint').innerHTML = `この色をターゲットにしました → <span style="display:inline-block;width:14px;height:14px;border-radius:4px;vertical-align:-2px;border:1px solid rgba(0,0,0,.2);background:${hex}"></span> (違ったらもう一度タップ)`;
+  toast('🎯 ユニフォーム色をセットしました');
+});
 async function loadModel(){
   if (session) return;
   $('engineText').textContent = 'AIモデルを読み込み中…';
@@ -1227,9 +1243,16 @@ function renderHistory(){
 }
 function entryHtml(en){
   if (en.kind === 'stats') return statsTableHtml(en.events, en.teams);
-  return `<div style="overflow-x:auto"><table class="stats">
+  const tc = en.teamColors;
+  const teamCell = p => {
+    const sw = p.col ? `<span class="sw" style="background:rgb(${p.col.join(',')})"></span>` : '';
+    const tag = tc ? `<span class="teamtag" style="background:rgba(${tc[p.team].join(',')},.2);color:rgb(${tc[p.team].map(v=>Math.round(v*0.65)).join(',')})">${p.team===0?'A':'B'}</span>` : (p.team===0?'A':'B');
+    return sw + tag;
+  };
+  return `${tc ? `<div class="hist-meta" style="margin-bottom:6px">チームA=<span class="sw" style="background:rgb(${tc[0].join(',')})"></span> ／ チームB=<span class="sw" style="background:rgb(${tc[1].join(',')})"></span></div>` : ''}
+  <div style="overflow-x:auto"><table class="stats">
     <thead><tr><th>チーム</th><th>選手</th><th>プレータイム</th><th>走行距離</th></tr></thead>
-    <tbody>${en.players.map(p=>`<tr><td>${p.team===0?'A':'B'}</td><td>${esc(p.name)}</td><td>${fmtTime(p.time)}</td><td>${p.dist!=null?p.dist+' m':'—'}</td></tr>`).join('')}</tbody>
+    <tbody>${en.players.map(p=>`<tr><td>${teamCell(p)}</td><td>${esc(p.name)}</td><td>${fmtTime(p.time)}</td><td>${p.dist!=null?p.dist+' m':'—'}</td></tr>`).join('')}</tbody>
   </table></div>`;
 }
 function entryCsv(en){
@@ -1260,9 +1283,11 @@ $('saveRecBtn').onclick = () => {
     date: $('recDate').value || new Date().toISOString().slice(0,10),
     title: $('recTitle').value.trim(),
     video: videoName,
+    teamColors: teamColors,
     players: lastPlayers.filter(p=>!p.excluded).map(p=>({
       team: p.team, name: p.name || ('#'+p.id), time: Math.round(p.time),
-      dist: H ? Math.round(p.dist) : null })),
+      dist: H ? Math.round(p.dist) : null,
+      col: p.colN ? p.col.map(v=>Math.round(v/p.colN)) : null })),
   });
   toast('記録を保存しました');
   openHistory();
