@@ -342,8 +342,8 @@ input.pname:focus{outline:none;border-color:var(--accent-line);box-shadow:0 0 0 
     <p class="sub">選手を自動で検出・追跡します。解析中はこのタブを開いたままにしてください。</p>
     <div class="optrow" style="margin-bottom:10px">
       <label><input type="checkbox" id="targUse"> 🎯 ターゲット追跡</label>
-      <input type="color" id="targCol" value="#1976d2" tabindex="-1" style="width:44px;height:32px;border:1px solid var(--line);border-radius:8px;background:var(--field);padding:2px;pointer-events:none">
-      <span class="hint" id="targHint">チェックを入れて、<b>下の映像の中の「追いたい選手のユニフォーム」を直接タップ</b>(左の四角に色が入ります)</span>
+      <input type="color" id="targCol" value="#1976d2" style="width:44px;height:32px;border:1px solid var(--line);border-radius:8px;background:var(--field);padding:2px">
+      <span class="hint" id="targHint">チェックを入れて、<b>下の映像の中の「追いたい選手のユニフォーム」を直接タップ</b>(うまく拾えない時は左の四角から手動調整もできます)</span>
     </div>
     <div class="optrow">
       <label>解析の細かさ:</label>
@@ -753,7 +753,7 @@ function updateTracks(dets, t, dt){
   const act = tracks.filter(tr=>tr.active);
   const used = new Set();
   // IoU または 中心の近さ でマッチ候補を作り、良い組み合わせから貪欲に採用
-  // (カメラの揺れ・低解像度で箱がズレても中心が近ければ同一人物とみなす)
+  // (速度予測による照合は実動画のA/B計測で悪化したため不採用)
   const pairs = [];
   act.forEach((tr,ti)=>dets.forEach((de,di)=>{
     const v = iou(tr.bbox, de);
@@ -788,7 +788,8 @@ function updateTracks(dets, t, dt){
     }
     const ntr = { id: nextId++, bbox: de, lastT: t, time: 0, dist: 0,
       court: footCourt(de), col:[0,0,0], colN:0, active: true, name:'', excluded:false,
-      thumb: null, thumbH: 0 };
+      thumb: null, thumbH: 0,
+      hSum: de.y2-de.y1, hN: 1, inN: 0, posN: 0 };
     captureThumb(ntr, de);
     tracks.push(ntr);
   });
@@ -796,7 +797,7 @@ function updateTracks(dets, t, dt){
 function detColor(b){
   const w = b.x2-b.x1, h = b.y2-b.y1;
   if (w < 8 || h < 16) return null;
-  colCtx.drawImage(video, b.x1+w*0.25, b.y1+h*0.18, w*0.5, h*0.30, 0, 0, 8, 8);
+  colCtx.drawImage(video, b.x1+w*0.35, b.y1+h*0.22, w*0.30, h*0.18, 0, 0, 8, 8);
   const px = colCtx.getImageData(0,0,8,8).data;
   let r=0,g=0,bl=0;
   for (let i=0;i<64;i++){ r+=px[i*4]; g+=px[i*4+1]; bl+=px[i*4+2]; }
@@ -817,6 +818,20 @@ function advance(tr, de, t, dt){
   tr.bbox = de; tr.lastT = t; tr.time += dt;
   sampleColor(tr, de);
   captureThumb(tr, de);
+  // 静止判定(観客・ベンチ)とコート内率の材料を蓄積。
+  // 「動いていたコマの割合」で判定する(ID乗り移りの一時ジャンプに強い)
+  const ctr = [(de.x1+de.x2)/2, (de.y1+de.y2)/2];
+  const hNow = de.y2 - de.y1;
+  // 滞在マス方式: 24pxマスごとの滞在コマ数(真に静止している人の除外用)
+  tr.cells ||= {}; tr.stepN = (tr.stepN||0) + 1;
+  const cellKey = Math.floor(ctr[0]/24)*1000 + Math.floor(ctr[1]/24);
+  tr.cells[cellKey] = (tr.cells[cellKey]||0) + 1;
+  tr.hSum += hNow; tr.hN++;
+  if (H){
+    const cp = footCourt(de);
+    tr.posN++;
+    if (cp && cp[0] > -1 && cp[0] < COURT_W+1 && cp[1] > -1 && cp[1] < COURT_H+1) tr.inN++;
+  }
   const c = footCourt(de);
   if (c && tr.court){
     // 位置を軽く平滑化してからステップ距離を加算
@@ -836,7 +851,8 @@ const colCtx = colCv.getContext('2d', { willReadFrequently: true });
 function sampleColor(tr, b){
   const w = b.x2-b.x1, h = b.y2-b.y1;
   if (w < 8 || h < 16) return;
-  colCtx.drawImage(video, b.x1+w*0.25, b.y1+h*0.18, w*0.5, h*0.30, 0, 0, 8, 8);
+  // 胴体の中心部だけを採色(背景・腕の写り込みを減らす。低解像度動画の実測で調整)
+  colCtx.drawImage(video, b.x1+w*0.35, b.y1+h*0.22, w*0.30, h*0.18, 0, 0, 8, 8);
   const px = colCtx.getImageData(0,0,8,8).data;
   let r=0,g=0,bl=0;
   for (let i=0;i<64;i++){ r+=px[i*4]; g+=px[i*4+1]; bl+=px[i*4+2]; }
@@ -931,7 +947,27 @@ function showResults(){
   const targRgb = targOn ? hexToRgb($('targCol').value) : null;
   // ターゲット追跡時は短い断片も名寄せ対象にするため下限を下げる
   const minT = targOn ? 5 : Math.min(30, videoDuration*0.15);
-  const players = tracks.filter(tr => tr.time >= minT && tr.colN > 0);
+  // 観客・ベンチ除外: 自分の身長の1.2倍も動いていない人は選手とみなさない。
+  // コート四隅指定済みなら、コート外にいる時間が長い人も除外(実測で観客の55%を削減)
+  const topCellRatio = tr => {
+    if (!tr.cells || !tr.stepN) return 0;
+    let mx = 0; for (const k in tr.cells) if (tr.cells[k] > mx) mx = tr.cells[k];
+    return mx / tr.stepN;
+  };
+  const isPlayer = tr =>
+    topCellRatio(tr) < 0.5 &&
+    (!H || tr.posN === 0 || tr.inN/tr.posN >= 0.4);
+  // チューニング用(コンソールから window.vaTrackStats() で分布を確認できる)
+  window.vaTrackStats = () => tracks
+    .filter(tr => tr.time >= 10)
+    .map(tr => ({ id: tr.id, sec: Math.round(tr.time), top: +topCellRatio(tr).toFixed(2) }))
+    .sort((a,b)=>b.sec-a.sec);
+  const base = tracks.filter(tr => tr.time >= minT && tr.colN > 0);
+  const players = base.filter(isPlayer);
+  const nAudience = base.length - players.length;
+  document.querySelector('#step4 .sub').innerHTML =
+    '切り出し画像を見て、同じ選手の断片に<b>同じ背番号</b>を入力すると、下の「選手ごとの合計」に名寄せされます。審判や観客は「除外」を押してください。' +
+    (nAudience > 0 ? `<br>🪑 ほぼ動いていない${nAudience}人(観客・ベンチとみなし)は自動で除外済みです。` : '');
   assignTeams(players);
   players.forEach(p => p.match = targRgb ? dist3(p.col.map(v=>v/p.colN), targRgb) < 100 : true);
   players.sort((a,b)=> (b.match-a.match) || (targOn ? b.time-a.time : (a.team-b.team) || (b.time-a.time)));
@@ -957,7 +993,8 @@ function showResults(){
       <td><span class="sw" style="background:rgb(${col.join(',')})"></span>
           <span class="teamtag" style="background:rgba(${tc.join(',')},.18);color:rgb(${tc.map(v=>Math.round(v*0.7)).join(',')})">${tr.team===0?'A':'B'}</span>
           ${targOn && tr.match ? '<span class="teamtag" style="background:var(--accent-tint);color:var(--accent)">🎯</span>' : ''}</td>
-      <td><input class="pname" list="numList" placeholder="#${tr.id}" value="${tr.name}"></td>
+      <td><input class="pname" list="numList" placeholder="背番号を入力" value="${tr.name}">
+          <span class="hist-meta" style="display:block;margin-top:2px">自動ID ${tr.id}(背番号ではありません)</span></td>
       <td><b>${fmtTime(tr.time)}</b></td>
       <td>${H ? (tr.dist>=1000 ? (tr.dist/1000).toFixed(2)+' km' : Math.round(tr.dist)+' m') : '—'}</td>
       <td>${H && tr.time>0 ? (tr.dist/tr.time*3.6).toFixed(1)+' km/h' : '—'}</td>
