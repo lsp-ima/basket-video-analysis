@@ -100,8 +100,12 @@ main{width:100%;max-width:980px;padding:0 14px;display:flex;flex-direction:colum
 .stage-wrap{position:relative;border-radius:var(--radius-sm);overflow:hidden;background:#000;line-height:0}
 canvas#stage,canvas#liveStage{width:100%;height:auto;display:block;touch-action:manipulation}
 #video{display:none}
-#stepTag #video,#stepReview #video{display:block;width:100%;height:auto}
-#reviewVideoWrap{position:sticky;top:8px;z-index:5;box-shadow:var(--shadow)}
+#stepTag #video{display:block;width:100%;height:auto}
+/* レビュー画面はスティッキー表示なので、大きすぎると下のカードに被って隠してしまう。
+   高さを小さく固定し、動画は中央寄せでその高さに収める。 */
+#reviewVideoWrap{position:sticky;top:8px;z-index:5;box-shadow:var(--shadow);
+  max-height:32vh;overflow:hidden;display:flex;justify-content:center;background:#000}
+#stepReview #video,#stepReview #ytWrap{display:block;width:auto;height:100%;max-width:100%}
 #ytWrap{width:100%;aspect-ratio:16/9;line-height:0}
 #ytWrap iframe{width:100%;height:100%;border:0}
 
@@ -340,17 +344,34 @@ input.pname:focus{outline:none;border-color:var(--accent-line);box-shadow:0 0 0 
   <!-- スタッツ自動検出: リング位置指定 -->
   <section class="card hidden" id="stepGoal">
     <h2>リング(ゴール)の位置をタップ</h2>
-    <p class="sub" id="goalGuide">得点判定に使います。映像に映っているリングの中心を<b>タップ</b>してください(両端のリングが映っていれば2つとも)。映っていなければスキップできます。</p>
+    <p class="sub" id="goalGuide">得点判定に使います。映像に映っているリングの中心を<b>タップ</b>してください。<b>カメラが動く・場面が切り替わる動画では、切り替わるたびにこの操作を繰り返して「＋この場面を登録」してください</b>(登録した場面ごとに、一番時刻が近いものを判定に使います)。映っていなければスキップできます。</p>
     <div class="stage-wrap"><canvas id="goalStage"></canvas></div>
     <div class="optrow" style="margin-top:10px">
       <label>リングが映っている場面まで動画を進める:</label>
-      <input type="range" id="goalSeek" min="0" max="100" value="0" style="flex:1;min-width:160px">
+      <input type="range" id="goalSeek" min="0" max="100" value="0" step="0.05" style="flex:1;min-width:160px">
       <span class="hint" id="goalSeekTime">0:00</span>
+    </div>
+    <div class="optrow" style="margin-top:8px">
+      <button class="btn ghost small" id="goalPlayBtn">▶ 再生</button>
+      <div class="seg" id="goalRateSeg">
+        <button data-rate="0.25">0.25×</button>
+        <button data-rate="0.5" class="on">0.5×</button>
+        <button data-rate="1">1×</button>
+      </div>
+      <label style="margin-left:6px">微調整:</label>
+      <button class="btn ghost small" id="goalNudgeBack">◀ 0.1秒</button>
+      <button class="btn ghost small" id="goalNudgeFwd">0.1秒 ▶</button>
     </div>
     <div class="btnrow">
       <button class="btn ghost small" id="undoGoal">1つ戻す</button>
       <button class="btn ghost small" id="skipGoal">スキップ(得点判定なし)</button>
       <span class="hint" id="goalCount">0個指定</span>
+      <div class="sp" style="flex:1"></div>
+      <button class="btn ghost" id="registerGoalScene" disabled>＋この場面を登録</button>
+    </div>
+    <div id="goalSceneList" class="chiprow"></div>
+    <div class="btnrow">
+      <span class="hint" id="goalSceneCount">登録済み: 0件</span>
       <div class="sp" style="flex:1"></div>
       <button class="btn" id="toEngineStep3" disabled>解析へ →</button>
     </div>
@@ -422,7 +443,18 @@ input.pname:focus{outline:none;border-color:var(--accent-line);box-shadow:0 0 0 
   <section class="card hidden" id="stepReview">
     <h2>イベント候補を確認</h2>
     <p class="sub">AIが検出した候補です。<b>間違いも含まれます</b>。各候補の<b>▶ ここを再生</b>で実際の場面を見てから、チーム・種類はタップで修正、✕で取り消してください。検出漏れは動画を再生しながら「＋見逃したプレーを追加」で足せます。</p>
-    <div class="stage-wrap" id="reviewVideoWrap" style="margin-bottom:14px"></div>
+    <div class="stage-wrap" id="reviewVideoWrap" style="margin-bottom:10px"></div>
+    <div class="optrow" style="margin-bottom:10px">
+      <button class="btn ghost small" id="reviewPlayBtn">▶ 再生</button>
+      <div class="seg" id="reviewRateSeg">
+        <button data-rate="0.5">0.5×</button>
+        <button data-rate="1" class="on">1×</button>
+        <button data-rate="1.5">1.5×</button>
+        <button data-rate="2">2×</button>
+      </div>
+      <button class="btn ghost small" id="reviewSeekBack">◀ 5秒</button>
+      <button class="btn ghost small" id="reviewSeekFwd">5秒 ▶</button>
+    </div>
     <div class="btnrow" style="margin:0 0 14px">
       <button class="btn ghost small" id="addReviewBtn">＋見逃したプレーを追加(今の再生位置)</button>
     </div>
@@ -636,31 +668,52 @@ $('modeEngine').onclick = () => {
 };
 /* スタッツ自動検出用: チーム設定のあとリング指定へ進む(選手個人へのイベント紐付けに背番号を使う) */
 function enterGoalStep(){
-  goalHoops = [];
+  goalHoops = []; goalCalibrations = [];
   const gs = $('goalStage');
   gs.width = video.videoWidth; gs.height = video.videoHeight;
   initGoalSeek();
   drawGoalCalibration();
+  renderGoalSceneList();
   showScreen('stepGoal');
 }
 
-/* ---------- リング位置タップ(スタッツ自動検出用) ---------- */
-let goalHoops = [];  // [{x,y,r}, ...] 動画ピクセル座標
+/* ---------- リング位置タップ(スタッツ自動検出用) ----------
+   カメラが動く・場面が切り替わる動画向けに、リング位置を時刻付きで複数登録できる。
+   得点判定はボール検出の時刻に一番近い登録場面のリング位置を使う(hoopsNear参照)。 */
+let goalHoops = [];        // [{x,y,r}, ...] 今タップ中(まだ未登録)の場面
+let goalCalibrations = []; // [{t, hoops:[{x,y,r},...]}, ...] 登録済みの場面一覧
 const goalStage = $('goalStage'), gctx = goalStage.getContext('2d');
 const HOOP_R_RATIO = 0.035; // リングの当たり判定半径(フレーム幅比)
-/* ジャンプボール等リングが映っていない場面から始まる動画向けに、この画面内で動画を進められるように */
+/* ジャンプボール等リングが映っていない場面から始まる動画向けに、この画面内で動画を進められるように。
+   早送りだと止めたい瞬間で止めにくいとの指摘を受け、スロー再生・0.1秒単位の微調整を追加した。 */
+const fmtTimeFine = t => `${Math.floor(t/60)}:${(t%60).toFixed(1).padStart(4,'0')}`;
 function initGoalSeek(){
   const seek = $('goalSeek');
-  seek.max = Math.max(1, Math.floor(videoDuration));
-  seek.value = Math.floor(video.currentTime);
-  $('goalSeekTime').textContent = fmtTime(video.currentTime);
+  seek.max = Math.max(1, videoDuration);
+  seek.value = video.currentTime;
+  $('goalSeekTime').textContent = fmtTimeFine(video.currentTime);
+  video.pause(); video.playbackRate = 0.5;
+  $('goalPlayBtn').textContent = '▶ 再生';
 }
 $('goalSeek').oninput = () => { video.currentTime = +$('goalSeek').value; };
-video.addEventListener('seeked', () => {
+video.addEventListener('timeupdate', () => {
   if ($('stepGoal').classList.contains('hidden')) return;
-  $('goalSeekTime').textContent = fmtTime(video.currentTime);
+  $('goalSeek').value = video.currentTime;
+  $('goalSeekTime').textContent = fmtTimeFine(video.currentTime);
   drawGoalCalibration();
 });
+$('goalPlayBtn').onclick = () => {
+  if (video.paused){ video.play(); $('goalPlayBtn').textContent = '❚❚ 一時停止'; }
+  else { video.pause(); $('goalPlayBtn').textContent = '▶ 再生'; }
+};
+document.querySelectorAll('#goalRateSeg button').forEach(btn => btn.onclick = () => {
+  document.querySelectorAll('#goalRateSeg button').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  video.playbackRate = +btn.dataset.rate;
+});
+const goalNudge = d => { video.pause(); $('goalPlayBtn').textContent = '▶ 再生'; video.currentTime = Math.max(0, Math.min(videoDuration, video.currentTime + d)); };
+$('goalNudgeBack').onclick = () => goalNudge(-0.1);
+$('goalNudgeFwd').onclick = () => goalNudge(0.1);
 function drawGoalCalibration(){
   gctx.drawImage(video, 0, 0, goalStage.width, goalStage.height);
   const r = goalStage.width * HOOP_R_RATIO;
@@ -672,10 +725,11 @@ function drawGoalCalibration(){
     gctx.fillText(String(i+1), h.x, h.y - r - 6);
   });
   $('goalCount').textContent = goalHoops.length + '個指定';
-  $('toEngineStep3').disabled = goalHoops.length === 0;
+  $('registerGoalScene').disabled = goalHoops.length === 0;
 }
 goalStage.addEventListener('pointerdown', e => {
-  if (goalHoops.length >= 2) return;
+  if (goalHoops.length >= 1) return;
+  video.pause(); $('goalPlayBtn').textContent = '▶ 再生';
   const r = goalStage.getBoundingClientRect();
   goalHoops.push({
     x: (e.clientX-r.left) * goalStage.width/r.width,
@@ -685,8 +739,34 @@ goalStage.addEventListener('pointerdown', e => {
   drawGoalCalibration();
 });
 $('undoGoal').onclick = () => { goalHoops.pop(); drawGoalCalibration(); };
-$('skipGoal').onclick = () => { goalHoops = []; enterStep3(); };
-$('toEngineStep3').onclick = () => enterStep3();
+/* 今タップした場面を時刻付きで登録し、次の場面のタップに備えてリセットする */
+$('registerGoalScene').onclick = () => {
+  if (!goalHoops.length) return;
+  goalCalibrations.push({ t: video.currentTime, hoops: goalHoops.slice() });
+  goalCalibrations.sort((a,b) => a.t - b.t);
+  goalHoops = [];
+  drawGoalCalibration();
+  renderGoalSceneList();
+  toast('この場面のリング位置を登録しました');
+};
+function renderGoalSceneList(){
+  const box = $('goalSceneList'); box.innerHTML = '';
+  goalCalibrations.forEach((c, idx) => {
+    const b = document.createElement('button');
+    b.className = 'pchip teamall';
+    b.textContent = `${fmtTimeFine(c.t)}(${c.hoops.length}個) ✕`;
+    b.onclick = () => { goalCalibrations.splice(idx,1); renderGoalSceneList(); $('toEngineStep3').disabled = goalCalibrations.length === 0; };
+    box.appendChild(b);
+  });
+  $('goalSceneCount').textContent = `登録済み: ${goalCalibrations.length}件`;
+  $('toEngineStep3').disabled = goalCalibrations.length === 0;
+}
+$('skipGoal').onclick = () => { goalHoops = []; goalCalibrations = []; enterStep3(); };
+$('toEngineStep3').onclick = () => {
+  // タップ済みだが登録し忘れている場面があれば、進む前に自動で登録しておく
+  if (goalHoops.length) $('registerGoalScene').onclick();
+  enterStep3();
+};
 
 /* ---------- STEP 2: コート四隅 ---------- */
 const stage = $('stage'), sctx = stage.getContext('2d');
@@ -934,14 +1014,24 @@ function recordPossession(t, pt){
   }
   if (best) possessionLog.push({ t, trackId: best.id });
 }
+/* 指定時刻に一番近い登録場面のリング位置を返す(カメラが動く動画向けの複数登録に対応) */
+function hoopsNear(t){
+  if (!goalCalibrations.length) return [];
+  let best = goalCalibrations[0], bd = Math.abs(goalCalibrations[0].t - t);
+  for (const c of goalCalibrations){
+    const d = Math.abs(c.t - t);
+    if (d < bd){ bd = d; best = c; }
+  }
+  return best.hoops;
+}
 /* ボールがリング領域を上→下に通過したら得点候補(誤検出があっても「間違えてもいい」設計) */
 function detectScoreCandidates(){
   scoreCandidates = [];
-  if (!goalHoops.length) return;
+  if (!goalCalibrations.length) return;
   for (let i=1;i<ballHist.length;i++){
     const a = ballHist[i-1], b = ballHist[i];
     if (b.t - a.t > 1.2) continue;
-    goalHoops.forEach((h, hi) => {
+    hoopsNear((a.t+b.t)/2).forEach((h, hi) => {
       const rangeX = h.r * 4;
       if (Math.abs(a.x-h.x) > rangeX && Math.abs(b.x-h.x) > rangeX) return;
       if (a.y < h.y - h.r*0.3 && b.y > h.y + h.r*0.3)
@@ -974,7 +1064,7 @@ function buildStatsEvents(){
     if (team == null) continue;
     if (prevTeam != null && team !== prevTeam){
       const bp = nearestBallPt(p.t);
-      const nearHoop = bp && goalHoops.some(h => Math.hypot(bp.x-h.x, bp.y-h.y) < h.r*5);
+      const nearHoop = bp && hoopsNear(p.t).some(h => Math.hypot(bp.x-h.x, bp.y-h.y) < h.r*5);
       statsEvents.push({ t: p.t, type: nearHoop ? 'reb' : 'stl', team, fromTeam: prevTeam });
     }
     prevTeam = team;
@@ -1009,6 +1099,9 @@ function showEventResults(){
 function enterReviewScreen(){
   if (!$('reviewDate').value) $('reviewDate').value = new Date().toISOString().slice(0,10);
   attachReviewVideo();
+  document.querySelectorAll('#reviewRateSeg button').forEach(b=>b.classList.toggle('on', b.dataset.rate==='1'));
+  if (!usingYT) video.playbackRate = 1;
+  $('reviewPlayBtn').textContent = '▶ 再生';
   renderReview();
   showScreen('stepReview');
 }
@@ -1033,7 +1126,32 @@ function playReviewClip(t){
     video.currentTime = Math.max(0, t - 2);
     video.play().catch(()=>{});
   }
+  $('reviewPlayBtn').textContent = '❚❚ 一時停止';
 }
+/* ブラウザ標準のシークバーは動画を小さく表示すると掴みにくいため、
+   再生/一時停止・速度切り替え・数秒送り戻しのボタンを別途用意する(ローカル動画/YouTube共通)。 */
+function reviewSeekTo(t){
+  if (usingYT){ if (ytPlayer && ytPlayer.seekTo) ytPlayer.seekTo(Math.max(0,t), true); }
+  else { video.currentTime = Math.max(0, t); }
+}
+$('reviewPlayBtn').onclick = () => {
+  const playing = usingYT ? (ytPlayer && ytPlayer.getPlayerState && ytPlayer.getPlayerState()===1) : !video.paused;
+  if (playing){
+    if (usingYT && ytPlayer) ytPlayer.pauseVideo(); else video.pause();
+    $('reviewPlayBtn').textContent = '▶ 再生';
+  } else {
+    if (usingYT && ytPlayer) ytPlayer.playVideo(); else video.play();
+    $('reviewPlayBtn').textContent = '❚❚ 一時停止';
+  }
+};
+document.querySelectorAll('#reviewRateSeg button').forEach(btn => btn.onclick = () => {
+  document.querySelectorAll('#reviewRateSeg button').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  const r = +btn.dataset.rate;
+  if (usingYT && ytPlayer) ytPlayer.setPlaybackRate(r); else video.playbackRate = r;
+});
+$('reviewSeekBack').onclick = () => reviewSeekTo(curTime() - 5);
+$('reviewSeekFwd').onclick = () => reviewSeekTo(curTime() + 5);
 function renderReview(){
   const teams = reviewTeamsMeta();
   const box = $('reviewList'); box.innerHTML = '';
