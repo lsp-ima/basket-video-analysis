@@ -340,11 +340,6 @@ input.pname:focus{outline:none;border-color:var(--accent-line);box-shadow:0 0 0 
   <section class="card hidden" id="step3">
     <h2>AI解析</h2>
     <p class="sub">選手を自動で検出・追跡します。解析中はこのタブを開いたままにしてください。</p>
-    <div class="optrow" style="margin-bottom:10px">
-      <label><input type="checkbox" id="targUse"> 🎯 ターゲット追跡</label>
-      <input type="color" id="targCol" value="#1976d2" style="width:44px;height:32px;border:1px solid var(--line);border-radius:8px;background:var(--field);padding:2px">
-      <span class="hint" id="targHint">チェックを入れて、<b>下の映像の中の「追いたい選手のユニフォーム」を直接タップ</b>(うまく拾えない時は左の四角から手動調整もできます)</span>
-    </div>
     <div class="optrow">
       <label>解析の細かさ:</label>
       <div class="seg" id="fpsSeg">
@@ -370,6 +365,7 @@ input.pname:focus{outline:none;border-color:var(--accent-line);box-shadow:0 0 0 
   <section class="card hidden" id="step4">
     <h2>解析結果</h2>
     <p class="sub">切り出し画像を見て、同じ選手の断片に<b>同じ背番号</b>を入力すると、下の「選手ごとの合計」に名寄せされます。審判や観客は「除外」を押してください。</p>
+    <div class="chiprow" id="teamFilterRow" style="margin-bottom:12px"></div>
     <div id="mergeBox" class="hidden">
       <div class="teamhdr">📎 選手ごとの合計(同じ背番号を合算)</div>
       <div style="overflow-x:auto"><table class="stats">
@@ -663,22 +659,8 @@ function enterStep3(){
   showScreen('step3');
   loadModel();
 }
-/* 映像をタップしてユニフォーム色を直接拾う(カラーピッカー不要) */
-live.addEventListener('pointerdown', e => {
-  if (running) return;
-  const r = live.getBoundingClientRect();
-  const x = Math.round((e.clientX - r.left) * live.width / r.width);
-  const y = Math.round((e.clientY - r.top) * live.height / r.height);
-  const S = 4; // タップ点の周辺 9x9px を平均
-  const d = lctx.getImageData(Math.max(0,x-S), Math.max(0,y-S), S*2+1, S*2+1).data;
-  let cr=0,cg=0,cb=0,n=d.length/4;
-  for (let i=0;i<d.length;i+=4){ cr+=d[i]; cg+=d[i+1]; cb+=d[i+2]; }
-  const hex = '#' + [cr/n, cg/n, cb/n].map(v=>Math.round(v).toString(16).padStart(2,'0')).join('');
-  $('targCol').value = hex;
-  $('targUse').checked = true;
-  $('targHint').innerHTML = `この色をターゲットにしました → <span style="display:inline-block;width:14px;height:14px;border-radius:4px;vertical-align:-2px;border:1px solid rgba(0,0,0,.2);background:${hex}"></span> (違ったらもう一度タップ)`;
-  toast('🎯 ユニフォーム色をセットしました');
-});
+/* ターゲット色の事前指定は廃止(色がくすむ低解像度動画で色合わせを強いる設計だったため)。
+   チームの絞り込みは結果画面の「チームA/B」ボタンで行う。 */
 async function loadModel(){
   if (session) return;
   $('engineText').textContent = 'AIモデルを読み込み中…';
@@ -866,7 +848,7 @@ $('stopBtn').onclick = () => { stopRequested = true; };
 async function runAnalysis(){
   if (!session || running) return;
   running = true; stopRequested = false;
-  tracks = []; nextId = 1; aiShowAll = false;
+  tracks = []; nextId = 1; aiShowAll = false; teamFilter = 'all';
   $('startBtn').classList.add('hidden');
   $('stopBtn').classList.remove('hidden');
   document.querySelectorAll('#fpsSeg button').forEach(b=>b.disabled=true);
@@ -941,12 +923,8 @@ function fmtTime(s){ s=Math.max(0,Math.round(s)); return `${(s/60)|0}:${String(s
 
 /* ---------- STEP 4: 結果 ---------- */
 let teamColors = null, lastPlayers = [], aiShowAll = false;
-const hexToRgb = h => [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)];
+let teamFilter = 'all';   // 'all' | 0 | 1 結果画面のチーム絞り込み
 function showResults(){
-  const targOn = $('targUse').checked;
-  const targRgb = targOn ? hexToRgb($('targCol').value) : null;
-  // ターゲット追跡時は短い断片も名寄せ対象にするため下限を下げる
-  const minT = targOn ? 5 : Math.min(30, videoDuration*0.15);
   // 観客・ベンチ除外: 自分の身長の1.2倍も動いていない人は選手とみなさない。
   // コート四隅指定済みなら、コート外にいる時間が長い人も除外(実測で観客の55%を削減)
   const topCellRatio = tr => {
@@ -962,16 +940,31 @@ function showResults(){
     .filter(tr => tr.time >= 10)
     .map(tr => ({ id: tr.id, sec: Math.round(tr.time), top: +topCellRatio(tr).toFixed(2) }))
     .sort((a,b)=>b.sec-a.sec);
-  const base = tracks.filter(tr => tr.time >= minT && tr.colN > 0);
+  // 5秒以上の断片を母集団に(チーム絞り込みで名寄せに使えるように)
+  const base = tracks.filter(tr => tr.time >= 5 && tr.colN > 0);
   const players = base.filter(isPlayer);
   const nAudience = base.length - players.length;
   document.querySelector('#step4 .sub').innerHTML =
     '切り出し画像を見て、同じ選手の断片に<b>同じ背番号</b>を入力すると、下の「選手ごとの合計」に名寄せされます。審判や観客は「除外」を押してください。' +
     (nAudience > 0 ? `<br>🪑 ほぼ動いていない${nAudience}人(観客・ベンチとみなし)は自動で除外済みです。` : '');
   assignTeams(players);
-  players.forEach(p => p.match = targRgb ? dist3(p.col.map(v=>v/p.colN), targRgb) < 100 : true);
-  players.sort((a,b)=> (b.match-a.match) || (targOn ? b.time-a.time : (a.team-b.team) || (b.time-a.time)));
+  players.sort((a,b)=> (a.team-b.team) || (b.time-a.time));
   lastPlayers = players;
+  // チーム絞り込みボタン(色はAIの自動分類結果)
+  const tf = $('teamFilterRow'); tf.innerHTML = '';
+  const mkFilter = (val, label, col) => {
+    const b = document.createElement('button');
+    b.className = 'pchip teamall' + (teamFilter === val ? ' on' : '');
+    b.innerHTML = (col ? `<span class="sw" style="background:rgb(${col.join(',')})"></span>` : '') + label;
+    b.onclick = () => { teamFilter = val; aiShowAll = false; showResults(); };
+    tf.appendChild(b);
+  };
+  mkFilter('all', 'すべて', null);
+  if (teamColors){ mkFilter(0, 'このチームだけ', teamColors[0]); mkFilter(1, 'このチームだけ', teamColors[1]); }
+  // 表示対象: すべて=30秒以上のみ(暫定表示)、チーム選択時=そのチームの断片全部
+  const view = teamFilter === 'all'
+    ? players.filter(p => p.time >= Math.min(30, videoDuration*0.15))
+    : players.filter(p => p.team === teamFilter);
   if (!$('recDate').value) $('recDate').value = new Date().toISOString().slice(0,10);
   // 名簿(チーム設定)があれば背番号の入力候補に
   try {
@@ -979,10 +972,9 @@ function showResults(){
     if (p) $('numList').innerHTML = [...p[0].nums, ...p[1].nums].map(n=>`<option value="${n}">`).join('');
   } catch(e){}
   const tb = $('resultBody'); tb.innerHTML = '';
-  // 細切れ追跡で行が増えすぎないよう、上位のみ表示(ターゲット時は色一致分を全部)
+  // 細切れ追跡で行が増えすぎないよう、上位のみ表示
   const CAP = 14;
-  const nMatch = players.filter(p=>p.match).length;
-  const shown = aiShowAll ? players : players.slice(0, targOn ? Math.max(nMatch, 1) : CAP);
+  const shown = aiShowAll ? view : view.slice(0, CAP);
   for (const tr of shown){
     const col = tr.col.map(v=>Math.round(v/tr.colN));
     const row = document.createElement('tr');
@@ -991,8 +983,7 @@ function showResults(){
     row.innerHTML = `
       <td>${tr.thumb ? `<img src="${tr.thumb}" style="width:36px;height:52px;object-fit:cover;border-radius:7px;background:#222">` : ''}</td>
       <td><span class="sw" style="background:rgb(${col.join(',')})"></span>
-          <span class="teamtag" style="background:rgba(${tc.join(',')},.18);color:rgb(${tc.map(v=>Math.round(v*0.7)).join(',')})">${tr.team===0?'A':'B'}</span>
-          ${targOn && tr.match ? '<span class="teamtag" style="background:var(--accent-tint);color:var(--accent)">🎯</span>' : ''}</td>
+          <span class="teamtag" style="background:rgba(${tc.join(',')},.18);color:rgb(${tc.map(v=>Math.round(v*0.7)).join(',')})">${tr.team===0?'A':'B'}</span></td>
       <td><input class="pname" list="numList" placeholder="背番号を入力" value="${tr.name}">
           <span class="hist-meta" style="display:block;margin-top:2px">自動ID ${tr.id}(背番号ではありません)</span></td>
       <td><b>${fmtTime(tr.time)}</b></td>
@@ -1004,13 +995,13 @@ function showResults(){
     tb.appendChild(row);
   }
   renderMerge();
-  if (!aiShowAll && players.length > shown.length){
+  if (!aiShowAll && view.length > shown.length){
     const row = document.createElement('tr');
-    row.innerHTML = `<td colspan="7" style="text-align:center"><button class="exbtn">残り${players.length - shown.length}件も表示する</button></td>`;
+    row.innerHTML = `<td colspan="7" style="text-align:center"><button class="exbtn">残り${view.length - shown.length}件も表示する</button></td>`;
     row.querySelector('.exbtn').onclick = () => { aiShowAll = true; showResults(); };
     tb.appendChild(row);
   }
-  if (!players.length)
+  if (!view.length)
     tb.innerHTML = '<tr><td colspan="7" style="color:var(--muted)">選手を検出できませんでした。より長い時間・引きすぎない画角の動画でお試しください。</td></tr>';
   $('csvBtn').onclick = () => exportCsv(players);
   showScreen('step4');
