@@ -98,9 +98,11 @@ main{width:100%;max-width:980px;padding:0 14px;display:flex;flex-direction:colum
   border-radius:var(--radius-sm);padding:10px 13px;font-size:12px;line-height:1.7;margin-top:8px}
 
 .stage-wrap{position:relative;border-radius:var(--radius-sm);overflow:hidden;background:#000;line-height:0}
-canvas#stage,canvas#liveStage{width:100%;height:auto;display:block;touch-action:manipulation}
+/* 縦動画でも画面からはみ出さないよう高さも制限する(object-fitは使わない:
+   タップ座標をgetBoundingClientRectで換算しているため、表示領域=描画内容を保つ必要がある) */
+canvas#stage,canvas#liveStage,canvas#goalStage{display:block;width:auto;height:auto;max-width:100%;max-height:62vh;margin:0 auto;touch-action:manipulation}
 #video{display:none}
-#stepTag #video{display:block;width:100%;height:auto}
+#stepTag #video{display:block;width:auto;height:auto;max-width:100%;max-height:60vh;margin:0 auto}
 /* レビュー画面はスティッキー表示なので、大きすぎると下のカードに被って隠してしまう。
    高さを小さく固定し、動画は中央寄せでその高さに収める。 */
 #reviewVideoWrap{position:sticky;top:8px;z-index:5;box-shadow:var(--shadow);
