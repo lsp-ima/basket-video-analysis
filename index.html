@@ -101,11 +101,6 @@ main{width:100%;max-width:980px;padding:0 14px;display:flex;flex-direction:colum
 canvas#stage,canvas#liveStage{width:100%;height:auto;display:block;touch-action:manipulation}
 #video{display:none}
 #stepTag #video{display:block;width:100%;height:auto}
-/* レビュー画面はスティッキー表示なので、大きすぎると下のカードに被って隠してしまう。
-   高さを小さく固定し、動画は中央寄せでその高さに収める。 */
-#reviewVideoWrap{position:sticky;top:8px;z-index:5;box-shadow:var(--shadow);
-  max-height:32vh;overflow:hidden;display:flex;justify-content:center;background:#000}
-#stepReview #video,#stepReview #ytWrap{display:block;width:auto;height:100%;max-width:100%}
 #ytWrap{width:100%;aspect-ratio:16/9;line-height:0}
 #ytWrap iframe{width:100%;height:100%;border:0}
 
@@ -221,7 +216,6 @@ input.pname:focus{outline:none;border-color:var(--accent-line);box-shadow:0 0 0 
   <div class="logo">🎥</div>
   <div class="ttl"><b>動画分析</b><span>TEAM BOARD ｜ AI試合分析(β)</span></div>
   <div class="sp"></div>
-  <button class="tbtn" id="homeBtn">🏠 ホーム</button>
   <button class="tbtn" id="histBtn">📚 記録</button>
   <button class="tbtn" id="themeBtn">🌓 テーマ</button>
 </header>
@@ -276,11 +270,6 @@ input.pname:focus{outline:none;border-color:var(--accent-line);box-shadow:0 0 0 
         <div class="mt">AI自動計測</div>
         <div class="md">プレータイム・走行距離をAIが自動計測。固定カメラ・高画質(1080p以上)の動画向けです。</div>
       </button>
-      <button class="mode-btn" id="modeEngine">
-        <div class="mi">🎯</div>
-        <div class="mt">スタッツ自動検出(実験)</div>
-        <div class="md">ボールとリングの位置からAIが得点・リバウンド・スティール・TOの候補を自動検出します。間違いもあるので、あとで人が確認・修正します。</div>
-      </button>
     </div>
   </section>
 
@@ -306,7 +295,7 @@ input.pname:focus{outline:none;border-color:var(--accent-line);box-shadow:0 0 0 
   <!-- スタッツ記録 -->
   <section class="card hidden" id="stepTag">
     <h2>スタッツ記録</h2>
-    <p class="sub">動画を見ながら、プレーが起きた瞬間に<b>「＋記録」だけ</b>タップしてください。誰が・何をしたかはあとでまとめて確認・入力できるので、止めずに見続けられます。</p>
+    <p class="sub">プレーが起きたら <b>選手(またはチーム)をタップ → プレーをタップ</b>。記録した瞬間の時間も残るので、あとで見返せます。</p>
     <div class="stage-wrap"><video id="video" muted playsinline preload="auto"></video><div id="ytWrap" class="hidden"><div id="ytBox"></div></div></div>
     <div class="optrow" style="margin-top:10px">
       <label>再生速度:</label>
@@ -316,13 +305,19 @@ input.pname:focus{outline:none;border-color:var(--accent-line);box-shadow:0 0 0 
         <button data-rate="1.5">1.5×</button>
         <button data-rate="2">2×</button>
       </div>
+      <span class="hint" id="evtCount"></span>
     </div>
+    <div id="tagTeams"></div>
+    <div class="evtrow" id="evtRow"></div>
     <div class="btnrow">
-      <button class="btn" id="tagAddBtn">＋記録(今の再生位置)</button>
-      <span class="hint" id="tagCount">記録済み 0件</span>
+      <button class="btn ghost small" id="undoEvt">↩ 直前を取り消す</button>
+      <span class="hint" id="lastEvt"></span>
     </div>
-    <div class="btnrow">
-      <button class="btn ghost" id="tagReviewBtn">確認・修正へ →</button>
+    <div id="tagStats"></div>
+    <div class="optrow" style="margin-top:16px">
+      <label>日付:</label><input type="date" id="tagDate" class="pname" style="width:150px">
+      <input type="text" id="tagMemo" class="pname" style="width:200px" placeholder="メモ(例: 紅白戦)">
+      <button class="btn small" id="saveTagBtn">💾 記録して終了</button>
     </div>
   </section>
 
@@ -338,42 +333,6 @@ input.pname:focus{outline:none;border-color:var(--accent-line);box-shadow:0 0 0 
       <span class="hint" id="cornerCount">0 / 4</span>
       <div class="sp" style="flex:1"></div>
       <button class="btn" id="toStep3" disabled>次へ →</button>
-    </div>
-  </section>
-
-  <!-- スタッツ自動検出: リング位置指定 -->
-  <section class="card hidden" id="stepGoal">
-    <h2>リング(ゴール)の位置をタップ</h2>
-    <p class="sub" id="goalGuide">得点判定に使います。映像に映っているリングの中心を<b>タップ</b>してください。<b>カメラが動く・場面が切り替わる動画では、切り替わるたびにこの操作を繰り返して「＋この場面を登録」してください</b>(登録した場面ごとに、一番時刻が近いものを判定に使います)。映っていなければスキップできます。</p>
-    <div class="stage-wrap"><canvas id="goalStage"></canvas></div>
-    <div class="optrow" style="margin-top:10px">
-      <label>リングが映っている場面まで動画を進める:</label>
-      <input type="range" id="goalSeek" min="0" max="100" value="0" step="0.05" style="flex:1;min-width:160px">
-      <span class="hint" id="goalSeekTime">0:00</span>
-    </div>
-    <div class="optrow" style="margin-top:8px">
-      <button class="btn ghost small" id="goalPlayBtn">▶ 再生</button>
-      <div class="seg" id="goalRateSeg">
-        <button data-rate="0.25">0.25×</button>
-        <button data-rate="0.5" class="on">0.5×</button>
-        <button data-rate="1">1×</button>
-      </div>
-      <label style="margin-left:6px">微調整:</label>
-      <button class="btn ghost small" id="goalNudgeBack">◀ 0.1秒</button>
-      <button class="btn ghost small" id="goalNudgeFwd">0.1秒 ▶</button>
-    </div>
-    <div class="btnrow">
-      <button class="btn ghost small" id="undoGoal">1つ戻す</button>
-      <button class="btn ghost small" id="skipGoal">スキップ(得点判定なし)</button>
-      <span class="hint" id="goalCount">0個指定</span>
-      <div class="sp" style="flex:1"></div>
-      <button class="btn ghost" id="registerGoalScene" disabled>＋この場面を登録</button>
-    </div>
-    <div id="goalSceneList" class="chiprow"></div>
-    <div class="btnrow">
-      <span class="hint" id="goalSceneCount">登録済み: 0件</span>
-      <div class="sp" style="flex:1"></div>
-      <button class="btn" id="toEngineStep3" disabled>解析へ →</button>
     </div>
   </section>
 
@@ -406,7 +365,6 @@ input.pname:focus{outline:none;border-color:var(--accent-line);box-shadow:0 0 0 
   <section class="card hidden" id="step4">
     <h2>解析結果</h2>
     <p class="sub">切り出し画像を見て、同じ選手の断片に<b>同じ背番号</b>を入力すると、下の「選手ごとの合計」に名寄せされます。審判や観客は「除外」を押してください。</p>
-    <div id="anchorRow" style="margin-bottom:10px"></div>
     <div class="chiprow" id="teamFilterRow" style="margin-bottom:12px"></div>
     <div id="mergeBox" class="hidden">
       <div class="teamhdr">📎 選手ごとの合計(同じ背番号を合算)</div>
@@ -425,50 +383,16 @@ input.pname:focus{outline:none;border-color:var(--accent-line);box-shadow:0 0 0 
       </table>
     </div>
     <datalist id="numList"></datalist>
-    <datalist id="titleList"></datalist>
     <div class="note" style="margin-top:14px">📏 走行距離は映像から推定した<b>目安</b>です(誤差±10〜15%程度)。
       選手が重なった場面では番号が入れ替わることがあります。チーム分けはユニフォームの色から自動推定しています。</div>
     <div class="optrow" style="margin-top:14px">
       <label>日付:</label><input type="date" id="recDate" class="pname" style="width:150px">
-      <input type="text" id="recTitle" class="pname" list="titleList" style="width:190px" placeholder="試合名(例: 紅白戦 vs FORZA)">
+      <input type="text" id="recTitle" class="pname" style="width:190px" placeholder="メモ(例: 紅白戦 vs FORZA)">
       <button class="btn small" id="saveRecBtn">💾 この結果を記録</button>
     </div>
     <div class="btnrow">
       <button class="btn" id="csvBtn">📄 CSVで保存</button>
       <button class="btn ghost" id="restartBtn">別の動画を解析する</button>
-    </div>
-  </section>
-
-  <!-- スタッツ自動検出: イベント候補の確認 -->
-  <section class="card hidden" id="stepReview">
-    <h2>イベント候補を確認</h2>
-    <p class="sub">AIが検出した候補です。<b>間違いも含まれます</b>。各候補の<b>▶ ここを再生</b>で実際の場面を見てから、チーム・種類はタップで修正、✕で取り消してください。検出漏れは動画を再生しながら「＋見逃したプレーを追加」で足せます。</p>
-    <div class="stage-wrap" id="reviewVideoWrap" style="margin-bottom:10px"></div>
-    <div class="optrow" style="margin-bottom:10px">
-      <button class="btn ghost small" id="reviewPlayBtn">▶ 再生</button>
-      <div class="seg" id="reviewRateSeg">
-        <button data-rate="0.5">0.5×</button>
-        <button data-rate="1" class="on">1×</button>
-        <button data-rate="1.5">1.5×</button>
-        <button data-rate="2">2×</button>
-      </div>
-      <button class="btn ghost small" id="reviewSeekBack">◀ 5秒</button>
-      <button class="btn ghost small" id="reviewSeekFwd">5秒 ▶</button>
-    </div>
-    <div class="btnrow" style="margin:0 0 14px">
-      <button class="btn ghost small" id="addReviewBtn">＋見逃したプレーを追加(今の再生位置)</button>
-    </div>
-    <div id="reviewList"></div>
-    <div id="reviewEmpty" class="hist-empty hidden">候補を検出できませんでした。リング位置の指定や、より高画質(1080p以上)の動画でお試しください。</div>
-    <div class="teamhdr" style="margin-top:16px">📊 確定分の集計</div>
-    <div id="reviewStats"></div>
-    <div class="optrow" style="margin-top:16px">
-      <label>日付:</label><input type="date" id="reviewDate" class="pname" style="width:150px">
-      <input type="text" id="reviewMemo" class="pname" list="titleList" style="width:200px" placeholder="試合名(例: 紅白戦)">
-      <button class="btn small" id="saveReviewBtn">💾 記録して終了</button>
-    </div>
-    <div class="btnrow">
-      <button class="btn ghost" id="reviewRestartBtn">別の動画を解析する</button>
     </div>
   </section>
 </main>
@@ -498,10 +422,6 @@ input.pname:focus{outline:none;border-color:var(--accent-line);box-shadow:0 0 0 
 
 const MODEL_URL = 'models/yolov8n.onnx';
 const MODEL_SIZE = 640;
-const OCR_MODEL_URL = 'models/ocr_rec.onnx';  // 背番号読み取り用(PaddleOCR en_number_mobile_v2.0、軽量な数字認識専用モデル)
-const OCR_DICT_URL = 'models/ocr_dict.txt';
-const OCR_H = 32;
-const OCR_CONF_MIN = 0.85;   // これ未満は「読めなかった」扱いにする(誤読より無読みを優先)
 const SCORE_MIN = 0.30;      // 検出を採用する下限スコア
 const SPAWN_MIN = 0.45;      // 新しい選手IDを発行する下限スコア
 const IOU_MATCH = 0.25;      // 追跡マッチングのIoU下限
@@ -510,8 +430,6 @@ const REVIVE_SEC = 6;        // 見失った選手をユニフォーム色で復
 const COLOR_REVIVE = 55;     // 復帰を許すユニフォーム色の距離(RGB)
 const MAX_SPEED = 9;         // m/s。これを超える移動はノイズとして距離に含めない
 const COURT_W = 28, COURT_H = 15;  // 中学生は一般コート(FIBA)と同寸
-const BALL_SCORE_MIN = 0.35; // ボール検出の採用下限(実測: 720p動画でconf>0.4が主な検出帯)
-const BALL_JUMP_MAX = 0.35;  // 1秒あたりに許容するボールの移動量(フレーム幅比)
 
 const $ = id => document.getElementById(id);
 const video = $('video');
@@ -559,14 +477,8 @@ let corners = [];            // コート四隅 [x,y] (動画ピクセル座標)
 let H = null;                // ホモグラフィ行列(3x3) 画素→コートm座標
 let sampleFps = 5;
 let tracks = [], nextId = 1;
-let ballTrack = null, ballHist = [];  // ボール追跡(通常1個なので単純な最近傍追跡)
 let running = false, stopRequested = false;
 let videoDuration = 0;
-
-/* ---------- ホーム(いつでも最初の画面に戻れるように) ---------- */
-$('homeBtn').onclick = () => {
-  if (confirm('最初の画面に戻ります。保存していない解析結果は失われます。よろしいですか?')) location.reload();
-};
 
 /* ---------- テーマ ---------- */
 $('themeBtn').onclick = () => {
@@ -580,8 +492,8 @@ if (localStorage.getItem('va-theme') === 'dark' ||
 function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show');
   clearTimeout(toast._tm); toast._tm=setTimeout(()=>t.classList.remove('show'),3200); }
 
-const SCREENS = ['histCard','step1','stepMode','stepTeam','stepTag','step2','stepGoal','step3','step4','stepReview'];
-const SCREEN_STEP = { step1:1, stepMode:2, stepTeam:3, stepTag:3, step2:3, stepGoal:3, step3:3, step4:4, stepReview:4 };
+const SCREENS = ['histCard','step1','stepMode','stepTeam','stepTag','step2','step3','step4'];
+const SCREEN_STEP = { step1:1, stepMode:2, stepTeam:3, stepTag:3, step2:3, step3:3, step4:4 };
 function showScreen(id){
   SCREENS.forEach(s => $(s).classList.toggle('hidden', s!==id));
   const n = SCREEN_STEP[id] || 0;
@@ -651,121 +563,12 @@ function onYtLoaded(){
 const curTime = () => usingYT ? (ytPlayer && ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : 0) : video.currentTime;
 
 /* ---------- モード選択 ---------- */
-let engineMode = 'measure';  // 'measure'(AI自動計測) | 'stats'(スタッツ自動検出)
-$('modeStats').onclick = () => { engineMode = 'measure'; loadTeamPrefs(); showScreen('stepTeam'); };
+$('modeStats').onclick = () => { loadTeamPrefs(); showScreen('stepTeam'); };
 $('modeAI').onclick = () => {
-  engineMode = 'measure';
   const st = $('stage');
   st.width = video.videoWidth; st.height = video.videoHeight;
   drawCalibration();
   showScreen('step2');
-};
-$('modeEngine').onclick = () => {
-  engineMode = 'stats';
-  corners = []; H = null;
-  loadTeamPrefs();
-  showScreen('stepTeam');
-};
-/* スタッツ自動検出用: チーム設定のあとリング指定へ進む(選手個人へのイベント紐付けに背番号を使う) */
-function enterGoalStep(){
-  goalHoops = []; goalCalibrations = [];
-  const gs = $('goalStage');
-  gs.width = video.videoWidth; gs.height = video.videoHeight;
-  initGoalSeek();
-  drawGoalCalibration();
-  renderGoalSceneList();
-  showScreen('stepGoal');
-}
-
-/* ---------- リング位置タップ(スタッツ自動検出用) ----------
-   カメラが動く・場面が切り替わる動画向けに、リング位置を時刻付きで複数登録できる。
-   得点判定はボール検出の時刻に一番近い登録場面のリング位置を使う(hoopsNear参照)。 */
-let goalHoops = [];        // [{x,y,r}, ...] 今タップ中(まだ未登録)の場面
-let goalCalibrations = []; // [{t, hoops:[{x,y,r},...]}, ...] 登録済みの場面一覧
-const goalStage = $('goalStage'), gctx = goalStage.getContext('2d');
-const HOOP_R_RATIO = 0.035; // リングの当たり判定半径(フレーム幅比)
-/* ジャンプボール等リングが映っていない場面から始まる動画向けに、この画面内で動画を進められるように。
-   早送りだと止めたい瞬間で止めにくいとの指摘を受け、スロー再生・0.1秒単位の微調整を追加した。 */
-const fmtTimeFine = t => `${Math.floor(t/60)}:${(t%60).toFixed(1).padStart(4,'0')}`;
-function initGoalSeek(){
-  const seek = $('goalSeek');
-  seek.max = Math.max(1, videoDuration);
-  seek.value = video.currentTime;
-  $('goalSeekTime').textContent = fmtTimeFine(video.currentTime);
-  video.pause(); video.playbackRate = 0.5;
-  $('goalPlayBtn').textContent = '▶ 再生';
-}
-$('goalSeek').oninput = () => { video.currentTime = +$('goalSeek').value; };
-video.addEventListener('timeupdate', () => {
-  if ($('stepGoal').classList.contains('hidden')) return;
-  $('goalSeek').value = video.currentTime;
-  $('goalSeekTime').textContent = fmtTimeFine(video.currentTime);
-  drawGoalCalibration();
-});
-$('goalPlayBtn').onclick = () => {
-  if (video.paused){ video.play(); $('goalPlayBtn').textContent = '❚❚ 一時停止'; }
-  else { video.pause(); $('goalPlayBtn').textContent = '▶ 再生'; }
-};
-document.querySelectorAll('#goalRateSeg button').forEach(btn => btn.onclick = () => {
-  document.querySelectorAll('#goalRateSeg button').forEach(b=>b.classList.remove('on'));
-  btn.classList.add('on');
-  video.playbackRate = +btn.dataset.rate;
-});
-const goalNudge = d => { video.pause(); $('goalPlayBtn').textContent = '▶ 再生'; video.currentTime = Math.max(0, Math.min(videoDuration, video.currentTime + d)); };
-$('goalNudgeBack').onclick = () => goalNudge(-0.1);
-$('goalNudgeFwd').onclick = () => goalNudge(0.1);
-function drawGoalCalibration(){
-  gctx.drawImage(video, 0, 0, goalStage.width, goalStage.height);
-  const r = goalStage.width * HOOP_R_RATIO;
-  goalHoops.forEach((h,i)=>{
-    gctx.strokeStyle = '#ffe14d'; gctx.lineWidth = Math.max(2, goalStage.width/300);
-    gctx.beginPath(); gctx.arc(h.x, h.y, r, 0, 7); gctx.stroke();
-    gctx.fillStyle = '#ffe14d'; gctx.font = `bold ${r}px sans-serif`;
-    gctx.textAlign = 'center'; gctx.textBaseline = 'middle';
-    gctx.fillText(String(i+1), h.x, h.y - r - 6);
-  });
-  $('goalCount').textContent = goalHoops.length + '個指定';
-  $('registerGoalScene').disabled = goalHoops.length === 0;
-}
-goalStage.addEventListener('pointerdown', e => {
-  if (goalHoops.length >= 1) return;
-  video.pause(); $('goalPlayBtn').textContent = '▶ 再生';
-  const r = goalStage.getBoundingClientRect();
-  goalHoops.push({
-    x: (e.clientX-r.left) * goalStage.width/r.width,
-    y: (e.clientY-r.top)  * goalStage.height/r.height,
-    r: goalStage.width * HOOP_R_RATIO,
-  });
-  drawGoalCalibration();
-});
-$('undoGoal').onclick = () => { goalHoops.pop(); drawGoalCalibration(); };
-/* 今タップした場面を時刻付きで登録し、次の場面のタップに備えてリセットする */
-$('registerGoalScene').onclick = () => {
-  if (!goalHoops.length) return;
-  goalCalibrations.push({ t: video.currentTime, hoops: goalHoops.slice() });
-  goalCalibrations.sort((a,b) => a.t - b.t);
-  goalHoops = [];
-  drawGoalCalibration();
-  renderGoalSceneList();
-  toast('この場面のリング位置を登録しました');
-};
-function renderGoalSceneList(){
-  const box = $('goalSceneList'); box.innerHTML = '';
-  goalCalibrations.forEach((c, idx) => {
-    const b = document.createElement('button');
-    b.className = 'pchip teamall';
-    b.textContent = `${fmtTimeFine(c.t)}(${c.hoops.length}個) ✕`;
-    b.onclick = () => { goalCalibrations.splice(idx,1); renderGoalSceneList(); $('toEngineStep3').disabled = goalCalibrations.length === 0; };
-    box.appendChild(b);
-  });
-  $('goalSceneCount').textContent = `登録済み: ${goalCalibrations.length}件`;
-  $('toEngineStep3').disabled = goalCalibrations.length === 0;
-}
-$('skipGoal').onclick = () => { goalHoops = []; goalCalibrations = []; enterStep3(); };
-$('toEngineStep3').onclick = () => {
-  // タップ済みだが登録し忘れている場面があれば、進む前に自動で登録しておく
-  if (goalHoops.length) $('registerGoalScene').onclick();
-  enterStep3();
 };
 
 /* ---------- STEP 2: コート四隅 ---------- */
@@ -843,33 +646,18 @@ function toCourt(px,py){
 
 /* ---------- STEP 3: 解析 ---------- */
 const live = $('liveStage'), lctx = live.getContext('2d');
-function setFps(v){
-  sampleFps = v;
-  document.querySelectorAll('#fpsSeg button').forEach(b => b.classList.toggle('on', +b.dataset.fps === v));
+document.querySelectorAll('#fpsSeg button').forEach(btn => btn.onclick = () => {
+  document.querySelectorAll('#fpsSeg button').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on'); sampleFps = +btn.dataset.fps;
   $('fpsHint').textContent = {3:'1秒あたり3コマを解析(最速・精度低め)',
-    5:'1秒あたり5コマを解析(バランス型)',10:'1秒あたり10コマを解析(高精度・時間がかかる)'}[v];
-}
-document.querySelectorAll('#fpsSeg button').forEach(btn => btn.onclick = () => setFps(+btn.dataset.fps));
+    5:'1秒あたり5コマを解析(バランス型)',10:'1秒あたり10コマを解析(高精度・時間がかかる)'}[sampleFps];
+});
 
 function enterStep3(){
   live.width = video.videoWidth; live.height = video.videoHeight;
   lctx.drawImage(video,0,0,live.width,live.height);
-  // スタッツ自動検出はボール検出の取りこぼしが精度に直結するため、精密(10fps)を既定にする
-  if (engineMode === 'stats') setFps(10);
   showScreen('step3');
-  // OCRモデルの読み込みはYOLOモデルの後に(同時にWASMを初期化すると競合するため)
-  loadModel().then(loadOcrModel);
-}
-/* 背番号OCR(補助): 読み込みに失敗しても計測本体は動くよう独立させる(任意機能) */
-let ocrSession = null, ocrDict = null;
-async function loadOcrModel(){
-  if (ocrSession || ocrDict === false) return;
-  try {
-    const txt = await (await fetch(OCR_DICT_URL)).text();
-    ocrDict = ['blank', ...txt.split('\n').map(s=>s.replace(/\r$/,'')).filter(s=>s.length), ' '];
-    ocrSession = await ort.InferenceSession.create(OCR_MODEL_URL,
-      { executionProviders: ['wasm'], graphOptimizationLevel: 'all' });
-  } catch(e){ console.warn('OCR model unavailable:', e); ocrDict = false; }
+  loadModel();
 }
 /* ターゲット色の事前指定は廃止(色がくすむ低解像度動画で色合わせを強いる設計だったため)。
    チームの絞り込みは結果画面の「チームA/B」ボタンで行う。 */
@@ -890,25 +678,6 @@ async function loadModel(){
   }
   $('engineText').textContent = 'AIモデルの読み込みに失敗しました。通信環境を確認して再読み込みしてください。';
   toast('AIモデルの読み込みに失敗しました');
-}
-
-/* 場面カット検出: 縮小フレーム同士の平均差が大きければカットとみなす */
-const cutCv = document.createElement('canvas'); cutCv.width = 48; cutCv.height = 27;
-const cutCtx = cutCv.getContext('2d', { willReadFrequently: true });
-let prevSmall = null;
-function detectCut(){
-  cutCtx.drawImage(video, 0, 0, 48, 27);
-  const d = cutCtx.getImageData(0, 0, 48, 27).data;
-  const cur = new Float32Array(48*27);
-  for (let i=0;i<cur.length;i++) cur[i] = (d[i*4]+d[i*4+1]+d[i*4+2])/3;
-  let cut = false;
-  if (prevSmall){
-    let sum = 0;
-    for (let i=0;i<cur.length;i++) sum += Math.abs(cur[i]-prevSmall[i]);
-    cut = (sum/cur.length) > 28;
-  }
-  prevSmall = cur;
-  return cut;
 }
 
 /* 前処理: レターボックスして 640x640 float32 NCHW に */
@@ -957,266 +726,6 @@ function iou(a,b){
   const ua = (a.x2-a.x1)*(a.y2-a.y1) + (b.x2-b.x1)*(b.y2-b.y1) - inter;
   return ua > 0 ? inter/ua : 0;
 }
-
-/* YOLO出力からボール(class 32 = sports ball)を取り出し NMS。
-   通常コート上のボールは1個なので上位数件だけ残す。 */
-function decodeBall(out, s, dx, dy){
-  const d = out.data, n = out.dims[2];
-  const cand = [];
-  for (let i=0;i<n;i++){
-    const score = d[36*n+i];               // 4(box) + class 32
-    if (score < BALL_SCORE_MIN) continue;
-    const cx=d[i], cy=d[n+i], w=d[2*n+i], h=d[3*n+i];
-    cand.push({ x1:(cx-w/2-dx)/s, y1:(cy-h/2-dy)/s, x2:(cx+w/2-dx)/s, y2:(cy+h/2-dy)/s, score });
-  }
-  cand.sort((a,b)=>b.score-a.score);
-  const keep = [];
-  for (const c of cand){
-    if (keep.every(k => iou(c,k) < 0.3)) keep.push(c);
-    if (keep.length >= 5) break;
-  }
-  return keep;
-}
-/* ボール追跡: 直前位置に近い候補を優先し、無ければ最高スコアの候補を採用する単純追跡。
-   誤検出(観客の頭など)によるジャンプはBALL_JUMP_MAXで抑制。 */
-function updateBallTrack(dets, t, frameW){
-  if (!dets.length) return null;
-  const cx = b => (b.x1+b.x2)/2, cy = b => (b.y1+b.y2)/2;
-  let pick = null;
-  if (ballTrack && t - ballTrack.t < 1.5){
-    const maxD = frameW * BALL_JUMP_MAX * Math.max(1, t - ballTrack.t);
-    let best = null, bestD = maxD;
-    for (const c of dets){
-      const dd = Math.hypot(cx(c)-ballTrack.x, cy(c)-ballTrack.y);
-      if (dd < bestD){ bestD = dd; best = c; }
-    }
-    pick = best;
-  }
-  if (!pick) pick = dets[0];
-  ballTrack = { x: cx(pick), y: cy(pick), t, score: pick.score, r: Math.max(pick.x2-pick.x1, pick.y2-pick.y1)/2 };
-  ballHist.push({ t, x: ballTrack.x, y: ballTrack.y });
-  if (ballHist.length > 600) ballHist.shift();
-  return { x: ballTrack.x, y: ballTrack.y };
-}
-
-/* ---------- スタッツ自動検出: ポゼッション推定・得点/リバウンド/スティール候補 ---------- */
-let possessionLog = [];    // [{t, trackId}] ボールに最も近い選手(この人がボールを持っているとみなす)
-let scoreCandidates = [];  // [{t, hoopIdx}]
-let statsEvents = [];      // [{t, type:'score'|'reb'|'stl', team, hoopIdx}]
-
-/* この時刻に検出された選手の中からボールに最も近い人を記録(=ポゼッション) */
-function recordPossession(t, pt){
-  let best = null, bestD = video.videoWidth * 0.09;
-  for (const tr of tracks){
-    if (!tr.active || tr.lastT !== t) continue;
-    const d = Math.hypot((tr.bbox.x1+tr.bbox.x2)/2-pt.x, (tr.bbox.y1+tr.bbox.y2)/2-pt.y);
-    if (d < bestD){ bestD = d; best = tr; }
-  }
-  if (best) possessionLog.push({ t, trackId: best.id });
-}
-/* 指定時刻に一番近い登録場面のリング位置を返す(カメラが動く動画向けの複数登録に対応) */
-function hoopsNear(t){
-  if (!goalCalibrations.length) return [];
-  let best = goalCalibrations[0], bd = Math.abs(goalCalibrations[0].t - t);
-  for (const c of goalCalibrations){
-    const d = Math.abs(c.t - t);
-    if (d < bd){ bd = d; best = c; }
-  }
-  return best.hoops;
-}
-/* ボールがリング領域を上→下に通過したら得点候補(誤検出があっても「間違えてもいい」設計) */
-function detectScoreCandidates(){
-  scoreCandidates = [];
-  if (!goalCalibrations.length) return;
-  for (let i=1;i<ballHist.length;i++){
-    const a = ballHist[i-1], b = ballHist[i];
-    if (b.t - a.t > 1.2) continue;
-    hoopsNear((a.t+b.t)/2).forEach((h, hi) => {
-      const rangeX = h.r * 4;
-      if (Math.abs(a.x-h.x) > rangeX && Math.abs(b.x-h.x) > rangeX) return;
-      if (a.y < h.y - h.r*0.3 && b.y > h.y + h.r*0.3)
-        scoreCandidates.push({ t: (a.t+b.t)/2, hoopIdx: hi });
-    });
-  }
-}
-function nearestBallPt(t){
-  let best = null, bd = 1.5;
-  for (const p of ballHist){ const d = Math.abs(p.t-t); if (d < bd){ bd = d; best = p; } }
-  return best;
-}
-/* 得点候補・ポゼッション交代(リバウンド/スティール・TO候補)をまとめてstatsEventsに構築 */
-function buildStatsEvents(){
-  const players = filterPlayerTracks();
-  // チーム設定で入力したユニフォーム色を「自チーム/相手チーム」の基準として使う
-  // (指定が無いと明るさだけで自動振り分けされ、どちらが自チームか根拠が無くなるため)
-  if (tagTeams) teamAnchors = [hexRgb(tagTeams[0].color), hexRgb(tagTeams[1].color)];
-  assignTeams(players);
-  lastPlayers = players;
-  const teamOf = id => { const p = players.find(pl=>pl.id===id); return p ? p.team : null; };
-  detectScoreCandidates();
-  statsEvents = scoreCandidates.map(sc => {
-    const poss = possessionLog.filter(p=>p.t <= sc.t).slice(-1)[0];
-    return { t: sc.t, type: 'score', team: poss ? teamOf(poss.trackId) : null, hoopIdx: sc.hoopIdx };
-  });
-  let prevTeam = null;
-  for (const p of possessionLog){
-    const team = teamOf(p.trackId);
-    if (team == null) continue;
-    if (prevTeam != null && team !== prevTeam){
-      const bp = nearestBallPt(p.t);
-      const nearHoop = bp && hoopsNear(p.t).some(h => Math.hypot(bp.x-h.x, bp.y-h.y) < h.r*5);
-      statsEvents.push({ t: p.t, type: nearHoop ? 'reb' : 'stl', team, fromTeam: prevTeam });
-    }
-    prevTeam = team;
-  }
-  statsEvents.sort((a,b)=>a.t-b.t);
-}
-/* デバッグ用: コンソールから window.vaStatsEvents() で検出済みイベント候補を確認できる */
-window.vaStatsEvents = () => ({ events: statsEvents, possessionN: possessionLog.length, scoreN: scoreCandidates.length });
-
-/* ---------- スタッツ自動検出: イベント候補の確認・修正画面 ---------- */
-let reviewEvents = [];  // [{t, team, num:null, k}] 人が確認・修正できる作業コピー
-/* 種類は候補の出どころ(得点判定/ポゼッション交代)に関わらず全部から選べるようにする。
-   得点の通過検出を取り逃して「スティール候補」としてしか出なかった場合でも、
-   動画を見て本当は得点だったと分かれば選び直せる必要があるため。 */
-const REVIEW_CHIPS = [
-  ['p2','+2点'], ['p3','+3点'], ['ft','FT +1点'],
-  ['reb','リバウンド'], ['ast','アシスト'], ['stl','スティール'], ['to','ターンオーバー'],
-];
-function reviewTeamsMeta(){
-  if (tagTeams) return tagTeams;
-  const col = i => teamColors ? `rgb(${teamColors[i].join(',')})` : (i===0?'#1976d2':'#e0e0e0');
-  return [{ name:'チームA', color: col(0), nums: [] }, { name:'チームB', color: col(1), nums: [] }];
-}
-function showEventResults(){
-  reviewEvents = statsEvents.map(e => ({
-    t: e.t, team: e.team != null ? e.team : 0, num: null,
-    k: e.type === 'score' ? 'p2' : e.type,
-  }));
-  enterReviewScreen();
-}
-/* イベント候補の確認・修正画面(AI自動検出/手動記録どちらからも共通で使う)へ入る */
-function enterReviewScreen(){
-  if (!$('reviewDate').value) $('reviewDate').value = new Date().toISOString().slice(0,10);
-  attachReviewVideo();
-  document.querySelectorAll('#reviewRateSeg button').forEach(b=>b.classList.toggle('on', b.dataset.rate==='1'));
-  if (!usingYT) video.playbackRate = 1;
-  $('reviewPlayBtn').textContent = '▶ 再生';
-  renderReview();
-  showScreen('stepReview');
-}
-/* 判定の根拠を実際に見て確認できるよう、動画(またはYouTube)をこの画面に表示する(再生操作付き) */
-function attachReviewVideo(){
-  if (usingYT){
-    $('reviewVideoWrap').appendChild($('ytWrap'));
-    $('ytWrap').classList.remove('hidden');
-  } else {
-    video.pause(); video.controls = true; video.muted = false;
-    video.classList.remove('hidden');
-    $('reviewVideoWrap').appendChild(video);
-  }
-}
-/* 候補の時刻の少し手前から動画を再生し、実際に何が起きたか確認できるようにする。
-   動画はスティッキー表示(#reviewVideoWrap)でスクロールしても常に見えるので、
-   ここでは自動スクロールしない(スティッキー位置とぶつかって余計に動くのを防ぐ)。 */
-function playReviewClip(t){
-  if (usingYT){
-    if (ytPlayer && ytPlayer.seekTo){ ytPlayer.seekTo(Math.max(0, t-2), true); ytPlayer.playVideo(); }
-  } else {
-    video.currentTime = Math.max(0, t - 2);
-    video.play().catch(()=>{});
-  }
-  $('reviewPlayBtn').textContent = '❚❚ 一時停止';
-}
-/* ブラウザ標準のシークバーは動画を小さく表示すると掴みにくいため、
-   再生/一時停止・速度切り替え・数秒送り戻しのボタンを別途用意する(ローカル動画/YouTube共通)。 */
-function reviewSeekTo(t){
-  if (usingYT){ if (ytPlayer && ytPlayer.seekTo) ytPlayer.seekTo(Math.max(0,t), true); }
-  else { video.currentTime = Math.max(0, t); }
-}
-$('reviewPlayBtn').onclick = () => {
-  const playing = usingYT ? (ytPlayer && ytPlayer.getPlayerState && ytPlayer.getPlayerState()===1) : !video.paused;
-  if (playing){
-    if (usingYT && ytPlayer) ytPlayer.pauseVideo(); else video.pause();
-    $('reviewPlayBtn').textContent = '▶ 再生';
-  } else {
-    if (usingYT && ytPlayer) ytPlayer.playVideo(); else video.play();
-    $('reviewPlayBtn').textContent = '❚❚ 一時停止';
-  }
-};
-document.querySelectorAll('#reviewRateSeg button').forEach(btn => btn.onclick = () => {
-  document.querySelectorAll('#reviewRateSeg button').forEach(b=>b.classList.remove('on'));
-  btn.classList.add('on');
-  const r = +btn.dataset.rate;
-  if (usingYT && ytPlayer) ytPlayer.setPlaybackRate(r); else video.playbackRate = r;
-});
-$('reviewSeekBack').onclick = () => reviewSeekTo(curTime() - 5);
-$('reviewSeekFwd').onclick = () => reviewSeekTo(curTime() + 5);
-function renderReview(){
-  const teams = reviewTeamsMeta();
-  const box = $('reviewList'); box.innerHTML = '';
-  $('reviewEmpty').classList.toggle('hidden', reviewEvents.length > 0);
-  reviewEvents.forEach((ev, idx) => {
-    const row = document.createElement('div'); row.className = 'hist-entry';
-    const head = document.createElement('div'); head.className = 'hist-head';
-    const tl = document.createElement('span'); tl.className = 'hist-date'; tl.textContent = fmtTime(ev.t);
-    const play = document.createElement('button'); play.className = 'exbtn'; play.textContent = '▶ ここを再生';
-    play.onclick = () => playReviewClip(ev.t);
-    const teamBtn = document.createElement('button'); teamBtn.className = 'pchip teamall';
-    teamBtn.innerHTML = `<span class="sw" style="background:${teams[ev.team].color}"></span>${esc(teams[ev.team].name)}`;
-    teamBtn.onclick = () => {
-      ev.team = 1 - ev.team;
-      if (ev.num !== null && !teams[ev.team].nums.includes(ev.num)) ev.num = null;
-      renderReview();
-    };
-    const types = document.createElement('div'); types.className = 'chiprow'; types.style.margin = '0';
-    REVIEW_CHIPS.forEach(([k,label]) => {
-      const b = document.createElement('button'); b.className = 'pchip' + (ev.k===k ? ' on' : '');
-      b.textContent = label; b.onclick = () => { ev.k = k; renderReview(); };
-      types.appendChild(b);
-    });
-    const sp = document.createElement('div'); sp.style.flex = '1';
-    const del = document.createElement('button'); del.className = 'exbtn'; del.textContent = '✕取り消す';
-    del.onclick = () => { reviewEvents.splice(idx,1); renderReview(); };
-    head.append(tl, play, teamBtn, types, sp, del);
-    row.appendChild(head);
-    // 誰のプレーか(背番号)。AIは個人を判別できないため既定は「個人不明」、人がタップで指定する
-    const who = document.createElement('div'); who.className = 'chiprow';
-    const mkWho = (label, num, cls) => {
-      const b = document.createElement('button');
-      b.className = 'pchip' + (cls?' '+cls:'') + (ev.num===num ? ' on' : '');
-      b.textContent = label;
-      b.onclick = () => { ev.num = num; renderReview(); };
-      who.appendChild(b);
-    };
-    teams[ev.team].nums.forEach(n => mkWho('#'+n, n));
-    mkWho('個人不明', null, 'teamall');
-    row.appendChild(who);
-    box.appendChild(row);
-  });
-  $('reviewStats').innerHTML = statsTableHtml(reviewEvents, teams);
-}
-/* AIの検出漏れ(特に得点)を人が動画を見ながら手動で足せるように。今の再生位置を時刻にする */
-$('addReviewBtn').onclick = () => {
-  reviewEvents.push({ t: curTime(), team: 0, num: null, k: 'p2' });
-  reviewEvents.sort((a,b) => a.t - b.t);
-  renderReview();
-  toast('候補を追加しました。内容を確認してください');
-};
-$('saveReviewBtn').onclick = () => {
-  if (!reviewEvents.length){ toast('保存するイベントがありません'); return; }
-  addHistory({
-    kind: 'stats',
-    date: $('reviewDate').value || new Date().toISOString().slice(0,10),
-    title: $('reviewMemo').value.trim(),
-    video: videoName,
-    teams: reviewTeamsMeta(),
-    events: reviewEvents,
-  });
-  toast('記録を保存しました');
-  openHistory();
-};
-$('reviewRestartBtn').onclick = () => location.reload();
 
 /* ---------- 追跡 ---------- */
 const boxSize = b => Math.max(b.x2-b.x1, b.y2-b.y1);
@@ -1276,40 +785,6 @@ function detColor(b){
   for (let i=0;i<64;i++){ r+=px[i*4]; g+=px[i*4+1]; bl+=px[i*4+2]; }
   return [r/64, g/64, bl/64];
 }
-/* 背番号OCR(補助): 胴体上部を切り出して軽量な数字認識モデルで読む。
-   低確信度・数字以外は「読めなかった」として捨てる(誤読より無読みを優先)。
-   モデル読み込み前/失敗時は何もしない(計測本体には影響しない)。 */
-const ocrCv = document.createElement('canvas');
-const octx = ocrCv.getContext('2d', { willReadFrequently: true });
-function ocrReadNumber(b){
-  if (!ocrSession) return null;
-  const w = b.x2-b.x1, h = b.y2-b.y1;
-  const sx = b.x1+w*0.20, sy = b.y1+h*0.15, sw = w*0.60, sh = h*0.35;
-  if (sw < 6 || sh < 6) return null;
-  const ow = Math.max(1, Math.round(OCR_H * sw/sh));
-  ocrCv.width = ow; ocrCv.height = OCR_H;
-  octx.drawImage(video, sx, sy, sw, sh, 0, 0, ow, OCR_H);
-  const img = octx.getImageData(0,0,ow,OCR_H).data;
-  const N = ow*OCR_H;
-  const arr = new Float32Array(N*3);
-  for (let i=0;i<N;i++){
-    arr[i]     = (img[i*4]/255 - 0.5)/0.5;
-    arr[i+N]   = (img[i*4+1]/255 - 0.5)/0.5;
-    arr[i+2*N] = (img[i*4+2]/255 - 0.5)/0.5;
-  }
-  return ocrSession.run({ x: new ort.Tensor('float32', arr, [1,3,OCR_H,ow]) }).then(out => {
-    const o = out[ocrSession.outputNames[0]];
-    const [,T,C] = o.dims, d = o.data;
-    let text = '', confN = 0, confSum = 0, prev = -1;
-    for (let t=0;t<T;t++){
-      let best = 0, bestV = -Infinity;
-      for (let c=0;c<C;c++){ const v = d[t*C+c]; if (v > bestV){ bestV = v; best = c; } }
-      if (best !== 0 && best !== prev){ text += ocrDict[best]; confSum += bestV; confN++; }
-      prev = best;
-    }
-    return { text, conf: confN ? confSum/confN : 0 };
-  }).catch(()=>null);
-}
 /* 追跡ごとに「一番大きく映った瞬間」の上半身サムネイルを残す(名寄せ用) */
 const thCv = document.createElement('canvas'); thCv.width = 44; thCv.height = 64;
 const thCtx = thCv.getContext('2d');
@@ -1319,14 +794,6 @@ function captureThumb(tr, b){
   const w = b.x2 - b.x1;
   thCtx.drawImage(video, b.x1, b.y1, w, h*0.62, 0, 0, 44, 64);
   try { tr.thumb = thCv.toDataURL('image/jpeg', 0.65); tr.thumbH = h; } catch(e){}
-  const p = ocrReadNumber(b);
-  if (p) p.then(r => {
-    if (r && /^\d{1,2}$/.test(r.text) && r.conf >= OCR_CONF_MIN && r.conf > (tr.ocrConf||0)){
-      tr.ocrNum = r.text; tr.ocrConf = r.conf;
-      // まだ人が背番号を確定していなければ、読み取れた番号を仮入力する(あとで人が確認・修正)
-      if (!tr.name) tr.name = r.text;
-    }
-  });
 }
 
 function advance(tr, de, t, dt){
@@ -1381,8 +848,7 @@ $('stopBtn').onclick = () => { stopRequested = true; };
 async function runAnalysis(){
   if (!session || running) return;
   running = true; stopRequested = false;
-  tracks = []; nextId = 1; aiShowAll = false; teamFilter = 'all'; teamAnchors = [null, null];
-  ballTrack = null; ballHist = []; possessionLog = []; scoreCandidates = []; statsEvents = [];
+  tracks = []; nextId = 1; aiShowAll = false; teamFilter = 'all';
   $('startBtn').classList.add('hidden');
   $('stopBtn').classList.remove('hidden');
   document.querySelectorAll('#fpsSeg button').forEach(b=>b.disabled=true);
@@ -1392,15 +858,10 @@ async function runAnalysis(){
   try {
     while (t < videoDuration && !stopRequested){
       await seekTo(t);
-      // 場面の切り替わり(カット)検出: 画面全体が急変したら追跡を全部リセット
-      // (ダイジェスト映像で別人に乗り移って色が混ざる事故を防ぐ)
-      if (detectCut()) tracks.forEach(tr => { tr.active = false; });
       const { tensor, s, dx, dy } = preprocess();
       const out = await session.run({ [inputName]: tensor });
       const dets = decode(out[outputName], s, dx, dy);
       updateTracks(dets, t, dt);
-      const ballPt = updateBallTrack(decodeBall(out[outputName], s, dx, dy), t, video.videoWidth);
-      if (engineMode === 'stats' && ballPt) recordPossession(t, ballPt);
       drawLive(dets);
       const frac = t/videoDuration;
       $('progFill').style.width = (frac*100).toFixed(1)+'%';
@@ -1414,7 +875,7 @@ async function runAnalysis(){
     $('progFill').style.width = '100%';
     $('progText').textContent = stopRequested ? '打ち切りました' : '解析完了';
     $('etaText').textContent = '';
-    if (engineMode === 'stats'){ buildStatsEvents(); showEventResults(); } else showResults();
+    showResults();
   } catch(e){
     console.error(e);
     toast('解析中にエラーが発生しました: ' + e.message);
@@ -1457,75 +918,29 @@ function drawLive(dets){
     lctx.fillStyle = (r*0.3+g*0.6+bl*0.1) > 140 ? '#111' : '#fff';
     lctx.fillText(label, b.x1+4, b.y1-fs-3);
   }
-  if (ballTrack){
-    lctx.strokeStyle = '#ffe14d'; lctx.lineWidth = Math.max(2, live.width/500);
-    lctx.beginPath(); lctx.arc(ballTrack.x, ballTrack.y, Math.max(6, ballTrack.r), 0, 7); lctx.stroke();
-  }
 }
-/* デバッグ用: コンソールから window.vaBallStats() でボール追跡の様子を確認できる */
-window.vaBallStats = () => ({ tracked: ballHist.length, last: ballTrack,
-  recent: ballHist.slice(-10).map(p=>({t:+p.t.toFixed(1), x:Math.round(p.x), y:Math.round(p.y)})) });
 function fmtTime(s){ s=Math.max(0,Math.round(s)); return `${(s/60)|0}:${String(s%60).padStart(2,'0')}`; }
 
 /* ---------- STEP 4: 結果 ---------- */
 let teamColors = null, lastPlayers = [], aiShowAll = false;
 let teamFilter = 'all';   // 'all' | 0 | 1 結果画面のチーム絞り込み
-
-/* チーム色の指定(赤・青・白・黒+その他)。両チーム指定されたら自動分類より優先。 */
-const PRESET_COLORS = [
-  ['赤', [180, 60, 60]],
-  ['青', [55, 85, 180]],
-  ['白', [205, 205, 205]],
-  ['黒', [50, 50, 55]],
-];
-let teamAnchors = [null, null];
-const hexRgb = h => [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)];
-function renderAnchorRow(){
-  const box = $('anchorRow'); box.innerHTML = '';
-  [['自チームの色', 0], ['相手チームの色', 1]].forEach(([label, ti])=>{
-    const wrap = document.createElement('div'); wrap.className = 'chiprow';
-    const lb = document.createElement('span'); lb.className = 'hint';
-    lb.style.minWidth = '100px'; lb.textContent = label + ':';
-    wrap.appendChild(lb);
-    PRESET_COLORS.forEach(([nm, rgb])=>{
-      const b = document.createElement('button');
-      const on = teamAnchors[ti] && teamAnchors[ti].join() === rgb.join();
-      b.className = 'pchip teamall' + (on ? ' on' : '');
-      b.innerHTML = `<span class="sw" style="background:rgb(${rgb.join(',')})"></span>${nm}`;
-      b.onclick = () => { teamAnchors[ti] = rgb; aiShowAll = false; showResults(); };
-      wrap.appendChild(b);
-    });
-    const custom = teamAnchors[ti] && !PRESET_COLORS.some(p => p[1].join() === teamAnchors[ti].join());
-    const other = document.createElement('button');
-    other.className = 'pchip teamall' + (custom ? ' on' : '');
-    other.innerHTML = (custom ? `<span class="sw" style="background:rgb(${teamAnchors[ti].join(',')})"></span>` : '') + 'その他';
-    const pick = document.createElement('input'); pick.type = 'color'; pick.style.display = 'none';
-    pick.oninput = () => { teamAnchors[ti] = hexRgb(pick.value); aiShowAll = false; showResults(); };
-    other.onclick = () => pick.click();
-    wrap.appendChild(other); wrap.appendChild(pick);
-    box.appendChild(wrap);
-  });
-}
-// 観客・ベンチ除外: 自分の身長の1.2倍も動いていない人は選手とみなさない。
-// コート四隅指定済みなら、コート外にいる時間が長い人も除外(実測で観客の55%を削減)
-function topCellRatio(tr){
-  if (!tr.cells || !tr.stepN) return 0;
-  let mx = 0; for (const k in tr.cells) if (tr.cells[k] > mx) mx = tr.cells[k];
-  return mx / tr.stepN;
-}
-function isPlayer(tr){
-  return topCellRatio(tr) < 0.5 && (!H || tr.posN === 0 || tr.inN/tr.posN >= 0.4);
-}
-/* 5秒以上映った断片を母集団にして観客・ベンチを除外(スタッツ自動検出とも共通) */
-function filterPlayerTracks(){
-  return tracks.filter(tr => tr.time >= 5 && tr.colN > 0).filter(isPlayer);
-}
 function showResults(){
+  // 観客・ベンチ除外: 自分の身長の1.2倍も動いていない人は選手とみなさない。
+  // コート四隅指定済みなら、コート外にいる時間が長い人も除外(実測で観客の55%を削減)
+  const topCellRatio = tr => {
+    if (!tr.cells || !tr.stepN) return 0;
+    let mx = 0; for (const k in tr.cells) if (tr.cells[k] > mx) mx = tr.cells[k];
+    return mx / tr.stepN;
+  };
+  const isPlayer = tr =>
+    topCellRatio(tr) < 0.5 &&
+    (!H || tr.posN === 0 || tr.inN/tr.posN >= 0.4);
   // チューニング用(コンソールから window.vaTrackStats() で分布を確認できる)
   window.vaTrackStats = () => tracks
     .filter(tr => tr.time >= 10)
     .map(tr => ({ id: tr.id, sec: Math.round(tr.time), top: +topCellRatio(tr).toFixed(2) }))
     .sort((a,b)=>b.sec-a.sec);
+  // 5秒以上の断片を母集団に(チーム絞り込みで名寄せに使えるように)
   const base = tracks.filter(tr => tr.time >= 5 && tr.colN > 0);
   const players = base.filter(isPlayer);
   const nAudience = base.length - players.length;
@@ -1535,8 +950,7 @@ function showResults(){
   assignTeams(players);
   players.sort((a,b)=> (a.team-b.team) || (b.time-a.time));
   lastPlayers = players;
-  renderAnchorRow();
-  // チーム絞り込みボタン(色は指定色またはAIの自動分類結果)
+  // チーム絞り込みボタン(色はAIの自動分類結果)
   const tf = $('teamFilterRow'); tf.innerHTML = '';
   const mkFilter = (val, label, col) => {
     const b = document.createElement('button');
@@ -1570,7 +984,8 @@ function showResults(){
       <td>${tr.thumb ? `<img src="${tr.thumb}" style="width:36px;height:52px;object-fit:cover;border-radius:7px;background:#222">` : ''}</td>
       <td><span class="sw" style="background:rgb(${col.join(',')})"></span>
           <span class="teamtag" style="background:rgba(${tc.join(',')},.18);color:rgb(${tc.map(v=>Math.round(v*0.7)).join(',')})">${tr.team===0?'A':'B'}</span></td>
-      <td><input class="pname" list="numList" placeholder="背番号" value="${tr.name}">${tr.ocrConf ? ' <span class="hint" title="AI推定(要確認)">🤖</span>' : ''}</td>
+      <td><input class="pname" list="numList" placeholder="背番号を入力" value="${tr.name}">
+          <span class="hist-meta" style="display:block;margin-top:2px">自動ID ${tr.id}(背番号ではありません)</span></td>
       <td><b>${fmtTime(tr.time)}</b></td>
       <td>${H ? (tr.dist>=1000 ? (tr.dist/1000).toFixed(2)+' km' : Math.round(tr.dist)+' m') : '—'}</td>
       <td>${H && tr.time>0 ? (tr.dist/tr.time*3.6).toFixed(1)+' km/h' : '—'}</td>
@@ -1607,50 +1022,27 @@ function renderMerge(){
     return `<tr><td>${esc(k)}</td><td>${g.n}</td><td><b>${fmtTime(g.time)}</b></td><td>${H?Math.round(g.dist)+' m':'—'}</td></tr>`;
   }).join('');
 }
-/* ユニフォーム平均色を k-means(k=2) で2チームに分ける。
-   低解像度で色がくすむため「明るさ」を2倍重み(白ユニ vs 濃色ユニの分離が最優先)。
-   明るい方を常にチームAにして表示順を安定させる。 */
-/* 色の生特徴 [明るさ, 青み(B-R), 緑み(G-B)] */
-const colRaw = c => [ (c[0]+c[1]+c[2])/3, c[2]-c[0], c[1]-c[2] ];
+/* ユニフォーム平均色を k-means(k=2) で2チームに分ける */
 function assignTeams(players){
   teamColors = null;
-  if (players.length < 2){ players.forEach(p=>p.team=0); if (teamAnchors[0] && teamAnchors[1]) teamColors=[teamAnchors[0].slice(),teamAnchors[1].slice()]; return; }
+  if (players.length < 2){ players.forEach(p=>p.team=0); return; }
   const cols = players.map(p => p.col.map(v=>v/p.colN));
-  const raw = cols.map(colRaw);
-  // z-score標準化: 「この動画で実際にチーム差が出ている軸」が自動的に効く
-  // (白vs紺なら明るさ、白vs青(照明で明るさが近い)なら青み、が支配的になる)
-  const mu = [0,1,2].map(d => raw.reduce((s,v)=>s+v[d],0)/raw.length);
-  const sd = [0,1,2].map(d => Math.sqrt(raw.reduce((s,v)=>s+(v[d]-mu[d])**2,0)/raw.length) + 1e-3);
-  const norm = v => [ (v[0]-mu[0])/sd[0], (v[1]-mu[1])/sd[1], (v[2]-mu[2])/sd[2] ];
-  const feats = raw.map(norm);
-  let c0 = feats[0], c1 = feats[1], best = 0;
-  for (let i=0;i<feats.length;i++) for (let j=i+1;j<feats.length;j++){
-    const d = dist3(feats[i],feats[j]);
-    if (d > best){ best = d; c0 = feats[i]; c1 = feats[j]; }
+  let c0 = cols[0], c1 = cols[1], best = 0;
+  // 最も色が離れた2点を初期中心に
+  for (let i=0;i<cols.length;i++) for (let j=i+1;j<cols.length;j++){
+    const d = dist3(cols[i],cols[j]);
+    if (d > best){ best = d; c0 = cols[i]; c1 = cols[j]; }
   }
   for (let it=0;it<8;it++){
     const g0=[],g1=[];
     players.forEach((p,i)=>{
-      p.team = dist3(feats[i],c0) <= dist3(feats[i],c1) ? 0 : 1;
-      (p.team===0?g0:g1).push(feats[i]);
+      p.team = dist3(cols[i],c0) <= dist3(cols[i],c1) ? 0 : 1;
+      (p.team===0?g0:g1).push(cols[i]);
     });
     if (g0.length) c0 = mean3(g0);
     if (g1.length) c1 = mean3(g1);
   }
-  const rgb = t => { const g = cols.filter((c,i)=>players[i].team===t); return g.length ? mean3(g).map(Math.round) : [128,128,128]; };
-  let A = rgb(0), B = rgb(1);
-  // ユーザーが色を指定していれば、2グループを指定色に対応付ける(自チーム=A)
-  if (teamAnchors[0] && teamAnchors[1]){
-    const fa = norm(colRaw(teamAnchors[0])), fb = norm(colRaw(teamAnchors[1]));
-    const gA = norm(colRaw(A)), gB = norm(colRaw(B));
-    if (dist3(gA,fb)+dist3(gB,fa) < dist3(gA,fa)+dist3(gB,fb))
-      players.forEach(p=>p.team = 1-p.team);
-    teamColors = [teamAnchors[0].slice(), teamAnchors[1].slice()];
-    return;
-  }
-  const lum = c => c[0]+c[1]+c[2];
-  if (lum(A) < lum(B)){ players.forEach(p=>p.team = 1-p.team); [A,B] = [B,A]; }
-  teamColors = [A, B];
+  teamColors = [c0.map(Math.round), c1.map(Math.round)];
 }
 const dist3 = (a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2]);
 const mean3 = g => [0,1,2].map(k=>g.reduce((s,c)=>s+c[k],0)/g.length);
@@ -1684,6 +1076,8 @@ const EVT_TYPES = [
   { k:'to',  label:'ターンオーバー' },
 ];
 let tagTeams = null;      // [{name,color,nums[]}, {…}]
+let events = [];          // {t, team, num(nullならチーム), k}
+let selected = null;      // {team, num|null}
 
 function loadTeamPrefs(){
   try {
@@ -1701,23 +1095,76 @@ $('toTagBtn').onclick = () => {
     { name: $('tnameB').value.trim() || '相手チーム', color: $('tcolB').value, nums: parseNums($('tnumsB').value) },
   ];
   try { localStorage.setItem('va-teams', JSON.stringify(tagTeams)); } catch(e){}
-  if (engineMode === 'stats'){ enterGoalStep(); return; }
-  reviewEvents = [];
+  events = []; selected = null;
   $('ytWrap').classList.toggle('hidden', !usingYT);
   video.classList.toggle('hidden', usingYT);
   if (!usingYT){ video.controls = true; video.muted = false; }
-  $('tagCount').textContent = '記録済み 0件';
+  $('tagDate').value = new Date().toISOString().slice(0,10);
+  buildTagUI();
+  renderTagStats();
   showScreen('stepTag');
 };
-/* 動画を止めずに「＋記録」だけタップして時間を記録し、誰が何をしたかはあとで
-   確認・修正画面(stepReview、AI自動検出と共通)でまとめて入力する */
-$('tagAddBtn').onclick = () => {
-  reviewEvents.push({ t: curTime(), team: 0, num: null, k: 'p2' });
-  $('tagCount').textContent = `記録済み ${reviewEvents.length}件`;
-};
-$('tagReviewBtn').onclick = () => {
-  if (!reviewEvents.length){ toast('まだ記録がありません。「＋記録」を押してから進んでください'); return; }
-  enterReviewScreen();
+
+function buildTagUI(){
+  const box = $('tagTeams'); box.innerHTML = '';
+  tagTeams.forEach((tm,ti)=>{
+    const hd = document.createElement('div'); hd.className = 'teamhdr';
+    hd.innerHTML = `<span class="dot" style="background:${tm.color}"></span>${esc(tm.name)}`;
+    const row = document.createElement('div'); row.className = 'chiprow';
+    const mk = (label, num, cls='') => {
+      const b = document.createElement('button');
+      b.className = 'pchip ' + cls; b.textContent = label;
+      b.onclick = () => {
+        selected = { team: ti, num };
+        document.querySelectorAll('.pchip').forEach(c=>c.classList.remove('on'));
+        b.classList.add('on');
+      };
+      row.appendChild(b);
+    };
+    tm.nums.forEach(n => mk('#'+n, n));
+    mk('チーム全体', null, 'teamall');
+    // 記録の途中でも選手(背番号)を追加できる
+    const add = document.createElement('button');
+    add.className = 'pchip teamall'; add.textContent = '＋追加';
+    add.onclick = () => {
+      const v = prompt(`${tm.name}に追加する背番号を入力(複数はスペース区切り)`, '');
+      if (!v) return;
+      const nums = parseNums(v).filter(n => !tm.nums.includes(n));
+      if (!nums.length){ toast('追加できる番号がありません'); return; }
+      tm.nums.push(...nums);
+      try { localStorage.setItem('va-teams', JSON.stringify(tagTeams)); } catch(e){}
+      selected = null;
+      buildTagUI(); renderTagStats();
+      toast(`${tm.name}に ${nums.map(n=>'#'+n).join(' ')} を追加しました`);
+    };
+    row.appendChild(add);
+    box.appendChild(hd); box.appendChild(row);
+  });
+  const er = $('evtRow'); er.innerHTML = '';
+  EVT_TYPES.forEach(ev=>{
+    const b = document.createElement('button');
+    b.className = 'evtbtn' + (ev.score ? ' score' : '');
+    b.textContent = ev.label;
+    b.onclick = () => addEvent(ev.k);
+    er.appendChild(b);
+  });
+}
+function addEvent(k){
+  if (!selected){ toast('先に選手(またはチーム全体)をタップしてください'); return; }
+  const t = curTime();
+  events.push({ t, team: selected.team, num: selected.num, k });
+  const tm = tagTeams[selected.team];
+  const who = selected.num !== null ? `#${selected.num}` : tm.name;
+  const ev = EVT_TYPES.find(e=>e.k===k);
+  $('lastEvt').textContent = `直前: ${fmtTime(t)} ${who} ${ev.label}`;
+  renderTagStats();
+}
+$('undoEvt').onclick = () => {
+  if (!events.length){ toast('取り消すものがありません'); return; }
+  const e = events.pop();
+  toast(`${EVT_TYPES.find(v=>v.k===e.k).label} を取り消しました`);
+  $('lastEvt').textContent = '';
+  renderTagStats();
 };
 document.querySelectorAll('#rateSeg button').forEach(btn => btn.onclick = () => {
   document.querySelectorAll('#rateSeg button').forEach(b=>b.classList.remove('on'));
@@ -1765,7 +1212,26 @@ function statsTableHtml(evts, teams){
     </table></div>`;
   }).join('');
 }
+function renderTagStats(){
+  $('evtCount').textContent = events.length ? `記録済み ${events.length}件` : '';
+  $('tagStats').innerHTML = statsTableHtml(events, tagTeams);
+}
 const esc = s => String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+$('saveTagBtn').onclick = () => {
+  if (!events.length){ toast('まだ何も記録されていません'); return; }
+  if (usingYT && ytPlayer && ytPlayer.pauseVideo) ytPlayer.pauseVideo(); else video.pause();
+  addHistory({
+    kind: 'stats',
+    date: $('tagDate').value || new Date().toISOString().slice(0,10),
+    title: $('tagMemo').value.trim(),
+    video: videoName,
+    teams: tagTeams,
+    events,
+  });
+  toast('記録を保存しました');
+  openHistory();
+};
 
 /* ============================================================
    記録(動画ごとの履歴・この端末のlocalStorageに保存)
@@ -1781,100 +1247,45 @@ function addHistory(entry){
   h.sort((a,b)=> (b.date||'').localeCompare(a.date||'') || b.id-a.id);
   try { localStorage.setItem(HKEY, JSON.stringify(h)); }
   catch(e){ toast('保存に失敗しました(端末の空き容量不足の可能性)'); }
-  refreshTitleList();
 }
-/* 試合名の入力候補(同じ試合名を選び直せるようにして、1人ずつ計測した分を確実にまとめる) */
-function refreshTitleList(){
-  const titles = [...new Set(getHistory().map(en => en.title).filter(Boolean))];
-  $('titleList').innerHTML = titles.map(t => `<option value="${esc(t)}">`).join('');
-}
-refreshTitleList();
 function openHistory(){ renderHistory(); showScreen('histCard'); }
 $('histBtn').onclick = openHistory;
 $('histCloseBtn').onclick = () => showScreen(video.src ? 'stepMode' : 'step1');
 
-/* 試合(日付+試合名)の識別キー。同じ試合名で複数回保存した記録をまとめるのに使う */
-const gameKey = en => (en.date||'') + '|' + (en.title||'').trim();
-/* 同じ試合の記録(AI自動計測の1人ずつの結果もスタッツも)を背番号ごとに1行へ統合する */
-function buildGameSummary(key){
-  const rows = {};
-  const get = (team,num) => (rows[`${team}#${num}`] ||= { team, num, time:0, dist:0, pts:0, reb:0, ast:0, stl:0, to:0 });
-  getHistory().filter(en => gameKey(en) === key).forEach(en => {
-    if (en.kind === 'ai'){
-      (en.players||[]).forEach(p => {
-        if (!p.name) return;
-        const r = get(p.team, p.name);
-        r.time += p.time||0; r.dist += p.dist||0;
-      });
-    } else if (en.kind === 'stats'){
-      (en.events||[]).forEach(e => {
-        if (e.num == null) return;
-        const r = get(e.team, e.num);
-        const ev = EVT_TYPES.find(v=>v.k===e.k);
-        if (ev && ev.pts) r.pts += ev.pts;
-        if (e.k==='reb') r.reb++; if (e.k==='ast') r.ast++;
-        if (e.k==='stl') r.stl++; if (e.k==='to') r.to++;
-      });
-    }
-  });
-  return Object.values(rows).sort((a,b)=> (a.team-b.team) ||
-    String(a.num).localeCompare(String(b.num), 'ja', { numeric:true }));
-}
-function gameSummaryHtml(key){
-  const rows = buildGameSummary(key);
-  if (!rows.length) return '<div class="hist-empty">この試合にはまだ背番号付きの記録がありません(個人不明のままだと集計されません)。</div>';
-  return `<div style="overflow-x:auto"><table class="stats">
-    <thead><tr><th>チーム</th><th>背番号</th><th>プレータイム</th><th>走行距離</th><th>得点</th><th>リバウンド</th><th>アシスト</th><th>スティール</th><th>TO</th></tr></thead>
-    <tbody>${rows.map(r => `<tr><td>${r.team===0?'A':'B'}</td><td>#${esc(r.num)}</td><td>${fmtTime(r.time)}</td>` +
-      `<td>${r.dist ? Math.round(r.dist)+' m' : '—'}</td><td>${r.pts}</td><td>${r.reb}</td><td>${r.ast}</td><td>${r.stl}</td><td>${r.to}</td></tr>`).join('')}</tbody>
-  </table></div>`;
-}
 function renderHistory(){
   const h = getHistory();
   const box = $('histList'); box.innerHTML = '';
-  if (!h.length){ box.innerHTML = '<div class="hist-empty">まだ記録がありません。動画を解析または記録すると、ここに試合ごとに残ります。</div>'; return; }
-  const groups = {}, order = [];
-  h.forEach(en => { const key = gameKey(en); if (!groups[key]){ groups[key] = []; order.push(key); } groups[key].push(en); });
-  for (const key of order){
-    const list = groups[key];
-    const [date, title] = key.split('|');
-    const g = document.createElement('div'); g.className = 'hist-entry';
-    g.innerHTML = `
+  if (!h.length){ box.innerHTML = '<div class="hist-empty">まだ記録がありません。動画を解析または記録すると、ここに日付ごとに残ります。</div>'; return; }
+  for (const en of h){
+    const d = document.createElement('div'); d.className = 'hist-entry';
+    const kind = en.kind === 'stats' ? '📋 スタッツ' : '🤖 AI計測';
+    const copyBtn = en.kind === 'stats' ? '<button class="exbtn act-copy">📥 スコアにコピー</button>' : '';
+    d.innerHTML = `
       <div class="hist-head">
-        <span class="hist-date">${esc(date)}</span>
-        <span class="hist-title">${esc(title || '(試合名未設定)')}</span>
-        <span class="hist-meta">${list.length}件の記録</span>
+        <span class="hist-date">${esc(en.date||'')}</span>
+        <span class="hist-title">${esc(en.title || '')}</span>
+        <span class="hist-meta">${kind} ｜ 🎥 ${esc(en.video||'')}</span>
         <div style="flex:1"></div>
-        <button class="exbtn act-summary">📊 試合の集計</button>
+        <button class="exbtn act-view">表示</button>
+        ${copyBtn}
+        <button class="exbtn act-csv">CSV</button>
+        <button class="exbtn act-del">削除</button>
       </div>
-      <div class="hist-body hidden" data-role="summary"></div>
-      <div data-role="entries" style="margin-top:8px"></div>`;
-    const summary = g.querySelector('[data-role=summary]');
-    g.querySelector('.act-summary').onclick = () => {
-      if (summary.classList.contains('hidden')){ summary.innerHTML = gameSummaryHtml(key); summary.classList.remove('hidden'); }
-      else summary.classList.add('hidden');
+      <div class="hist-body hidden"></div>`;
+    const body = d.querySelector('.hist-body');
+    d.querySelector('.act-view').onclick = () => {
+      if (body.classList.contains('hidden')){ body.innerHTML = entryHtml(en); body.classList.remove('hidden'); }
+      else body.classList.add('hidden');
     };
-    const entries = g.querySelector('[data-role=entries]');
-    list.forEach(en => {
-      const row = document.createElement('div');
-      row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid var(--line-soft)';
-      const kind = en.kind === 'stats' ? '📋 スタッツ' : '🤖 AI計測';
-      row.innerHTML = `<span class="hist-meta">${kind} ｜ 🎥 ${esc(en.video||'')}</span><div style="flex:1"></div>
-        <button class="exbtn act-view">表示</button><button class="exbtn act-csv">CSV</button><button class="exbtn act-del">削除</button>`;
-      const body = document.createElement('div'); body.className = 'hist-body hidden';
-      row.querySelector('.act-view').onclick = () => {
-        if (body.classList.contains('hidden')){ body.innerHTML = entryHtml(en); body.classList.remove('hidden'); }
-        else body.classList.add('hidden');
-      };
-      row.querySelector('.act-csv').onclick = () => entryCsv(en);
-      row.querySelector('.act-del').onclick = () => {
-        if (!confirm('この記録を削除しますか?')) return;
-        localStorage.setItem(HKEY, JSON.stringify(getHistory().filter(x=>x.id!==en.id)));
-        renderHistory();
-      };
-      entries.append(row, body);
-    });
-    box.appendChild(g);
+    const copyEl = d.querySelector('.act-copy');
+    if (copyEl) copyEl.onclick = () => entryCopyToScore(en);
+    d.querySelector('.act-csv').onclick = () => entryCsv(en);
+    d.querySelector('.act-del').onclick = () => {
+      if (!confirm('この記録を削除しますか?')) return;
+      localStorage.setItem(HKEY, JSON.stringify(getHistory().filter(x=>x.id!==en.id)));
+      renderHistory();
+    };
+    box.appendChild(d);
   }
 }
 function entryHtml(en){
@@ -1888,28 +1299,46 @@ function entryHtml(en){
   return `${tc ? `<div class="hist-meta" style="margin-bottom:6px">チームA=<span class="sw" style="background:rgb(${tc[0].join(',')})"></span> ／ チームB=<span class="sw" style="background:rgb(${tc[1].join(',')})"></span></div>` : ''}
   <div style="overflow-x:auto"><table class="stats">
     <thead><tr><th>チーム</th><th>選手</th><th>プレータイム</th><th>走行距離</th></tr></thead>
-    <tbody>${en.players.map(p=>`<tr><td>${teamCell(p)}</td><td>${p.name && !/^#\d+$/.test(p.name) ? esc(p.name) : '<span class="hist-meta">番号未設定</span>'}</td><td>${fmtTime(p.time)}</td><td>${p.dist!=null?p.dist+' m':'—'}</td></tr>`).join('')}</tbody>
+    <tbody>${en.players.map(p=>`<tr><td>${teamCell(p)}</td><td>${esc(p.name)}</td><td>${fmtTime(p.time)}</td><td>${p.dist!=null?p.dist+' m':'—'}</td></tr>`).join('')}</tbody>
   </table></div>`;
 }
+function statsCsvString(en){
+  const rows = [['チーム','選手','得点','リバウンド','アシスト','スティール','ターンオーバー']];
+  calcStats(en.events, en.teams).forEach((s,ti)=>{
+    const nm = en.teams[ti].name;
+    s.rows.forEach(r=>rows.push([nm,'#'+r.num,r.pts,r.reb,r.ast,r.stl,r.to]));
+    rows.push([nm,'チーム(個人不明)',s.teamRow.pts,s.teamRow.reb,s.teamRow.ast,s.teamRow.stl,s.teamRow.to]);
+    rows.push([nm,'合計',s.tot.pts,s.tot.reb,s.tot.ast,s.tot.stl,s.tot.to]);
+  });
+  return '﻿' + rows.map(r=>r.join(',')).join('\r\n');
+}
 function entryCsv(en){
-  let rows;
+  let csv;
   if (en.kind === 'stats'){
-    rows = [['チーム','選手','得点','リバウンド','アシスト','スティール','ターンオーバー']];
-    calcStats(en.events, en.teams).forEach((s,ti)=>{
-      const nm = en.teams[ti].name;
-      s.rows.forEach(r=>rows.push([nm,'#'+r.num,r.pts,r.reb,r.ast,r.stl,r.to]));
-      rows.push([nm,'チーム(個人不明)',s.teamRow.pts,s.teamRow.reb,s.teamRow.ast,s.teamRow.stl,s.teamRow.to]);
-      rows.push([nm,'合計',s.tot.pts,s.tot.reb,s.tot.ast,s.tot.stl,s.tot.to]);
-    });
+    csv = statsCsvString(en);
   } else {
-    rows = [['チーム','選手','プレータイム(秒)','走行距離(m)']];
+    const rows = [['チーム','選手','プレータイム(秒)','走行距離(m)']];
     en.players.forEach(p=>rows.push([p.team===0?'A':'B', p.name, p.time, p.dist ?? '']));
+    csv = '﻿' + rows.map(r=>r.join(',')).join('\r\n');
   }
-  const csv = '﻿' + rows.map(r=>r.join(',')).join('\r\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
   a.download = `記録_${en.date}${en.title?'_'+en.title:''}.csv`;
   a.click();
+}
+async function entryCopyToScore(en){
+  const csv = statsCsvString(en);
+  try{
+    await navigator.clipboard.writeText(csv);
+    toast('コピーしました。チームアプリのスコアで「貼り付けて取り込み」を押してください');
+  }catch(e){
+    const ta = document.createElement('textarea');
+    ta.value = csv; ta.style.position='fixed'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    let ok=false; try{ ok=document.execCommand('copy'); }catch(e2){}
+    document.body.removeChild(ta);
+    toast(ok?'コピーしました。スコアで「貼り付けて取り込み」を押してください':'コピーできませんでした');
+  }
 }
 /* AI結果の保存 */
 $('saveRecBtn').onclick = () => {
@@ -1921,7 +1350,7 @@ $('saveRecBtn').onclick = () => {
     video: videoName,
     teamColors: teamColors,
     players: lastPlayers.filter(p=>!p.excluded).map(p=>({
-      team: p.team, name: p.name.trim(), time: Math.round(p.time),
+      team: p.team, name: p.name || ('#'+p.id), time: Math.round(p.time),
       dist: H ? Math.round(p.dist) : null,
       col: p.colN ? p.col.map(v=>Math.round(v/p.colN)) : null })),
   });
